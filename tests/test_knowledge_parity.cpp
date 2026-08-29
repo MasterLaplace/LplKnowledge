@@ -194,8 +194,8 @@ int main()
         check("a confidence above one is refused, not clamped", !lpl::knowledge::fromWireFact(wire, fact));
 
         wire.confidenceRaw = 32768u;
-        wire.fromYear = 1300;
-        wire.toYear = 1200;
+        wire.fromDay = 1300;
+        wire.toDay = 1200;
         check("a reversed window is refused", !lpl::knowledge::fromWireFact(wire, fact));
 
         lpl::knowledge::SourceV1 source{};

@@ -62,7 +62,7 @@ namespace lpl::harvest {
  * structurally, so none of them needs a judgement. The moment a predicate would need one —
  * "supersedes", "contradicts" — it belongs to a reader that can read, not to a scanner.
  *
- * ⚠⚠ **Neither of these is FUNCTIONAL, and that has a consequence worth naming.**
+ * @warning **Neither of these is FUNCTIONAL, and that has a consequence worth naming.**
  * `history::contradicts` implements the mutual-exclusion rule — same subject, same
  * predicate, overlapping windows, different objects cannot both hold — and its own header
  * says why: *a person is not in two places in the same year*. That assumes one object per
@@ -114,6 +114,18 @@ struct IngestReport {
     core::u32 unknownScheme{0u}; ///< Tokens of identifier shape whose prefix no scheme uses. Noise.
     core::u32 duplicates{0u};  ///< Identifiers defined in two places. See below.
     core::u32 dated{0u};       ///< Headings carrying a date.
+    core::u32 footnotes{0u};   ///< Footnotes defined. See @ref kPredicateDefinedIn.
+    core::u32 footnoteCitations{0u}; ///< References to a footnote from the prose.
+    core::u32 danglingFootnotes{0u}; ///< References to a note nothing defines in that chapter.
+    /**
+     * Footnote markers in documents that define no notes at all. Noise, not defects.
+     *
+     * The @ref looksLikeIdentifier scheme rule, one level up: shape alone cannot tell a
+     * reference from prose quoting the notation, and only the corpus can. Measured on this
+     * project — `CLAUDE.md` writes "notes [^19] [^20]" while discussing the book, and reading
+     * those two as broken references is what buries the ones that are real.
+     */
+    core::u32 footnoteNoise{0u};
     std::string firstDangling; ///< The first unresolved identifier, for the message.
     std::string firstDuplicate; ///< The first identifier defined twice, for the message.
 };
@@ -139,7 +151,7 @@ struct IngestReport {
  * Two to four upper-case characters with at least one letter, a hyphen, then EXACTLY three
  * digits: `SIM-016`, `DWG-014`, `CT3-004`, `KN-007`.
  *
- * ⚠ Shape alone is not enough and cannot be made enough — that was measured, not feared.
+ * @warning Shape alone is not enough and cannot be made enough — that was measured, not feared.
  * A first version allowed one to four digits and dutifully reported `FNV-1` as an
  * identifier cited 93 times and defined nowhere. Three digits kills `FNV-1a` and `UTF-8`;
  * it does NOT kill `SHA-256`, and no rule written in advance will, because `SHA-256` and
@@ -171,6 +183,28 @@ struct IngestReport {
  * @return false when the line carries no ISO date.
  */
 [[nodiscard]] bool extractIsoYear(const char *text, core::u32 bytes, core::i32 &outYear) noexcept;
+
+/**
+ * @brief Builds the corpus-wide name of a footnote.
+ *
+ * @warning **A footnote number is scoped to its CHAPTER, and getting that wrong fuses notes
+ * silently.** Measured on this project's own book before a line of this was written: 95
+ * definition lines carrying only **20 distinct numbers**, because the numbering restarts at
+ * every chapter. Keyed on the document, those 95 notes would have collapsed onto 20
+ * identifiers — 75 of them reported as defined twice, and every one of the 119 references
+ * resolving to whichever note happened to win. Keyed on the chapter: 95 pairs, zero
+ * duplicates, and all 119 references resolving inside their own chapter.
+ *
+ * The same shape as the `[S<id>]` tags in a research report, which are scoped to one RUN, and
+ * as `corpus::workIdentifier` refusing to let a passage into a work's identity. A locally
+ * meaningful number is not an identity until something says which local.
+ *
+ * @param canonical How the document is cited.
+ * @param chapter   Ordinal of the enclosing top-level heading, counting from one.
+ * @param number    The footnote's number as written.
+ * @return A name unique across the corpus, e.g. `docs/Book.md#ch7[^19]`.
+ */
+[[nodiscard]] std::string footnoteName(std::string_view canonical, core::u32 chapter, std::string_view number);
 
 } // namespace lpl::harvest
 

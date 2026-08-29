@@ -102,8 +102,22 @@ core::u32 describeQuery(const Query &query, char *out, core::u32 capacity) noexc
         appendTerm(out, capacity, cursor, "object", query.object);
     if (query.source != kNoIdentifier)
         appendTerm(out, capacity, cursor, "source", query.source);
-    if (query.year != kAnyYear)
-        appendTerm(out, capacity, cursor, "year", query.year);
+    // Described as the year it names when the window is exactly one, and as a day range
+    // otherwise: a reader of this line thinks in years, and "days 439350..439714" would be
+    // technically honest and practically unreadable.
+    if (query.dayFrom != kAnyYear || query.dayTo != kAnyYear)
+    {
+        const core::i32 from = query.dayFrom != kAnyYear ? query.dayFrom : query.dayTo;
+        const core::i32 to = query.dayTo != kAnyYear ? query.dayTo : query.dayFrom;
+        const core::i32 year = history::yearOfDay(from);
+        if (from == history::firstDayOfYear(year) && to == history::lastDayOfYear(year))
+            appendTerm(out, capacity, cursor, "year", year);
+        else
+        {
+            appendTerm(out, capacity, cursor, "day_from", from);
+            appendTerm(out, capacity, cursor, "day_to", to);
+        }
+    }
     if (query.minConfidenceRaw != 0u)
         appendTerm(out, capacity, cursor, "sigma_raw_min", query.minConfidenceRaw);
 

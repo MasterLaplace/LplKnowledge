@@ -24,7 +24,7 @@ bool fromWireFact(const FactV1 &wire, history::Fact &out) noexcept
 {
     out = history::Fact{};
 
-    if (wire.toYear < wire.fromYear)
+    if (wire.toDay < wire.fromDay)
         return false;
     if (wire.confidenceRaw > kOneRaw)
         return false;
@@ -32,8 +32,8 @@ bool fromWireFact(const FactV1 &wire, history::Fact &out) noexcept
     out.subject = wire.subject;
     out.predicate = wire.predicate;
     out.object = wire.object;
-    out.fromYear = wire.fromYear;
-    out.toYear = wire.toYear;
+    out.fromDay = wire.fromDay;
+    out.toDay = wire.toDay;
     out.source = wire.source;
     out.sigma = math::Fixed32::fromRaw(static_cast<core::i32>(wire.confidenceRaw));
     return true;
@@ -45,8 +45,8 @@ void toWireFact(const history::Fact &fact, core::u32 locus, FactV1 &out) noexcep
     out.subject = fact.subject;
     out.predicate = fact.predicate;
     out.object = fact.object;
-    out.fromYear = fact.fromYear;
-    out.toYear = fact.toYear;
+    out.fromDay = fact.fromDay;
+    out.toDay = fact.toDay;
     out.source = fact.source;
     // The raw word verbatim, never a float round trip: the point of carrying Q16.16 on the
     // wire is that the bits that come back are the bits that went in.
@@ -64,6 +64,8 @@ bool fromWireSource(const SourceV1 &wire, history::SourceProfile &out) noexcept
     out.id = wire.id;
     out.kind = static_cast<history::SourceKind>(wire.kind);
     out.yearsAfterEvent = wire.yearsAfterEvent;
+    out.composedFrom = wire.composedFrom;
+    out.composedTo = wire.composedTo;
     out.independentAgreements = wire.agreements;
     return true;
 }
@@ -75,6 +77,8 @@ void toWireSource(const history::SourceProfile &profile, core::u32 name, core::u
     out.id = profile.id;
     out.kind = static_cast<core::u32>(profile.kind);
     out.yearsAfterEvent = profile.yearsAfterEvent;
+    out.composedFrom = profile.composedFrom;
+    out.composedTo = profile.composedTo;
     out.agreements = profile.independentAgreements;
     out.name = name;
     out.document = document;
@@ -119,7 +123,7 @@ bool toHistoryCorpus(const KnowledgePack &pack, history::Corpus &out, DecodeRepo
             // Told apart rather than counted together: a reversed window is a baker that
             // wrote the fields in the wrong order, a confidence above one is a damaged
             // byte. The two send a reader looking in different places.
-            if (wire.toYear < wire.fromYear)
+            if (wire.toDay < wire.fromDay)
                 ++report.badWindow;
             else
                 ++report.badConfidence;
@@ -143,7 +147,7 @@ bool corporaMatch(const history::Corpus &a, const history::Corpus &b) noexcept
         const history::Fact &y = b.facts[i];
         if (x.subject != y.subject || x.predicate != y.predicate || x.object != y.object)
             return false;
-        if (x.fromYear != y.fromYear || x.toYear != y.toYear || x.source != y.source)
+        if (x.fromDay != y.fromDay || x.toDay != y.toDay || x.source != y.source)
             return false;
         // Compared on the RAW word, not with operator==: two Fixed32 that differ by one
         // unit in the last place are a round-trip that lost a bit, and any comparison with
@@ -158,7 +162,8 @@ bool corporaMatch(const history::Corpus &a, const history::Corpus &b) noexcept
         const history::SourceProfile &y = b.sources[i];
         if (x.id != y.id || x.kind != y.kind)
             return false;
-        if (x.yearsAfterEvent != y.yearsAfterEvent || x.independentAgreements != y.independentAgreements)
+        if (x.yearsAfterEvent != y.yearsAfterEvent || x.independentAgreements != y.independentAgreements ||
+            x.composedFrom != y.composedFrom || x.composedTo != y.composedTo)
             return false;
     }
 

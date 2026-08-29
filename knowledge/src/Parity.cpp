@@ -42,8 +42,8 @@ namespace {
         foldWord(hash, fact.subject);
         foldWord(hash, fact.predicate);
         foldWord(hash, fact.object);
-        foldWord(hash, static_cast<core::u32>(fact.fromYear));
-        foldWord(hash, static_cast<core::u32>(fact.toYear));
+        foldWord(hash, static_cast<core::u32>(fact.fromDay));
+        foldWord(hash, static_cast<core::u32>(fact.toDay));
         foldWord(hash, fact.source);
         foldWord(hash, fact.confidenceRaw);
         foldWord(hash, fact.locus);

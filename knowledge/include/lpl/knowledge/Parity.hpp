@@ -18,7 +18,7 @@
  * which is exactly the failure this whole module exists to make impossible. Equality with
  * P13 is therefore not decoration; it is the only check that could notice.
  *
- * ⚠ The corpus is declared ONCE, in `history::parityCorpus`. Nothing here re-states it.
+ * @warning The corpus is declared ONCE, in `history::parityCorpus`. Nothing here re-states it.
  * Two transcriptions of the same corpus would make this a test of transcription.
  *
  * @author MasterLaplace

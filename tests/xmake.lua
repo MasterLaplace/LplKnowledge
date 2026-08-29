@@ -35,6 +35,98 @@ target("test-harvest-ingest")
     add_files("test_harvest_ingest.cpp")
 target_end()
 
+-- Deciding that two names denote one thing, and refusing to when nothing says so. No
+-- foundation: every number here is a raw Q16.16 integer, which is exactly what lets the
+-- lock on the whole harvest be exercised in a standalone checkout.
+target("test-entity-resolution")
+    set_kind("binary")
+    set_group("tests")
+    set_default(false)
+    add_deps("lpl-harvest", "lpl-knowledge", "lpl-corpus")
+    if LPL_FOUNDATION_AVAILABLE then add_deps("lpl-foundation") end
+    add_files("test_entity_resolution.cpp")
+target_end()
+
+-- Reading prose into claims, and refusing what the prose did not say. No foundation, and no
+-- model either: `IClaimReader` exists so the half that CHECKS can be exercised without the
+-- half that guesses, and a safety argument that could only be re-run behind an inference pass
+-- is one nobody re-runs.
+target("test-synthesis")
+    set_kind("binary")
+    set_group("tests")
+    set_default(false)
+    add_deps("lpl-harvest", "lpl-knowledge", "lpl-corpus")
+    if LPL_FOUNDATION_AVAILABLE then add_deps("lpl-foundation") end
+    add_files("test_synthesis.cpp")
+target_end()
+
+-- Reading a research run into the library. No foundation either, and for the same reason:
+-- a report is text, and the arithmetic of doubt lives in another repository.
+target("test-harvest-research")
+    set_kind("binary")
+    set_group("tests")
+    set_default(false)
+    add_deps("lpl-harvest", "lpl-knowledge", "lpl-corpus")
+    if LPL_FOUNDATION_AVAILABLE then add_deps("lpl-foundation") end
+    add_files("test_harvest_research.cpp")
+target_end()
+
+-- Reading a canonical text out of TEI. No foundation: this is XML scanning and ordinal
+-- arithmetic, and it is the FIRST producer in the repository of a three-level locus — the
+-- addressing `corpus/` was designed around and that nothing had ever written.
+-- @warning Every date shape here was measured in the corpus before it was written down: a date
+-- parser tested against dates its author imagined is a parser tested against its author.
+-- @warning The soft join. It may fill a value; it may never decide an identity, because splitting is
+-- reversible and merging is not.
+target("test-author-dates")
+    set_kind("binary")
+    set_group("tests")
+    set_default(false)
+    add_deps("lpl-harvest", "lpl-knowledge", "lpl-corpus")
+    if LPL_FOUNDATION_AVAILABLE then add_deps("lpl-foundation") end
+    add_files("test_author_dates.cpp")
+target_end()
+
+-- @warning A headerless format cannot be validated from the inside, so every fixture here encodes its
+-- own position: a misread of row order, column order or byte order shows up as a WRONG PLACE.
+target("test-relief")
+    set_kind("binary")
+    set_group("tests")
+    set_default(false)
+    add_deps("lpl-harvest", "lpl-knowledge", "lpl-corpus")
+    if LPL_FOUNDATION_AVAILABLE then add_deps("lpl-foundation") end
+    add_files("test_relief.cpp")
+target_end()
+
+target("test-mentions")
+    set_kind("binary")
+    set_group("tests")
+    set_default(false)
+    add_deps("lpl-harvest", "lpl-knowledge", "lpl-corpus")
+    if LPL_FOUNDATION_AVAILABLE then add_deps("lpl-foundation") end
+    add_files("test_mentions.cpp")
+target_end()
+
+target("test-harvest-tei")
+    set_kind("binary")
+    set_group("tests")
+    set_default(false)
+    add_deps("lpl-harvest", "lpl-knowledge", "lpl-corpus")
+    if LPL_FOUNDATION_AVAILABLE then add_deps("lpl-foundation") end
+    add_files("test_harvest_tei.cpp")
+target_end()
+
+-- Indexing what exists without fetching it. No foundation: a holdings row is columns and
+-- positions, and the arithmetic of doubt is not involved in saying who has a book.
+target("test-catalogue")
+    set_kind("binary")
+    set_group("tests")
+    set_default(false)
+    add_deps("lpl-harvest", "lpl-knowledge", "lpl-corpus")
+    if LPL_FOUNDATION_AVAILABLE then add_deps("lpl-foundation") end
+    add_files("test_catalogue.cpp")
+target_end()
+
 -- Gate P18 `corpus`. Declared only when the foundation is there, and that is
 -- Foundation.hpp's own policy rather than an accident: without Fixed32 there is no
 -- determinism contract to put under test, so the target is ABSENT rather than stubbed. A
@@ -50,3 +142,27 @@ target("test-knowledge-parity")
 target_end()
 
 end -- if LPL_FOUNDATION_AVAILABLE
+
+-- ⚠ Offline by construction. Every response this exercises is canned, because the part of an
+-- OAI-PMH client with bugs in it is the loop — continuation, retry, tombstones, repeated tokens
+-- — and each is a server behaviour that cannot be summoned from a live repository on demand.
+target("test-oaipmh")
+    set_kind("binary")
+    set_group("tests")
+    set_default(false)
+    add_deps("lpl-harvest", "lpl-knowledge", "lpl-corpus")
+    if LPL_FOUNDATION_AVAILABLE then add_deps("lpl-foundation") end
+    add_files("test_oaipmh.cpp")
+target_end()
+
+-- ⚠ The Pleiades reader was verified against 42 400 real places and guarded against nothing.
+-- A component with no test is the one every future bug gets blamed on — a lesson this repository
+-- paid for the same day, on the ECS double buffering.
+target("test-gazetteer")
+    set_kind("binary")
+    set_group("tests")
+    set_default(false)
+    add_deps("lpl-harvest", "lpl-knowledge", "lpl-corpus")
+    if LPL_FOUNDATION_AVAILABLE then add_deps("lpl-foundation") end
+    add_files("test_gazetteer.cpp")
+target_end()

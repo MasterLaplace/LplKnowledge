@@ -16,6 +16,7 @@
 #include <lpl/corpus/Urn.hpp>
 #include <lpl/knowledge/FactStore.hpp>
 #include <lpl/knowledge/KnowledgePack.hpp>
+#include <lpl/history/Calendar.hpp>
 #include <lpl/knowledge/Query.hpp>
 
 #include <cstdio>
@@ -260,8 +261,11 @@ void testQuery()
     fact.subject = 7u;
     fact.predicate = 11u;
     fact.object = 22u;
-    fact.fromYear = 1200;
-    fact.toYear = 1250;
+    // @warning DAYS, and this fixture held year numbers until the query started converting properly.
+    // It passed all along -- both sides were wrong the same way, so `during(1200)` compared 1200
+    // against 1200 and matched. A test can be green because its bug is symmetric with the code's.
+    fact.fromDay = lpl::history::firstDayOfYear(1200);
+    fact.toDay = lpl::history::lastDayOfYear(1250);
     fact.source = 100u;
     fact.confidenceRaw = 32768u;
 
@@ -273,12 +277,17 @@ void testQuery()
     check("a year outside it does not match",
           !lpl::knowledge::matches(lpl::knowledge::Query{}.during(1199), fact));
 
-    // An instant — fromYear equal to toYear — has to be coverable, which a half-open window
-    // would make impossible.
+    // An INSTANT -- one day -- must still answer a question asked about its year. That is the
+    // asymmetry the unit exists for: sources are vague and a precise claim must not fall through
+    // the gaps between their windows. Containment would drop exactly the sharpest facts.
     lpl::knowledge::FactV1 instant = fact;
-    instant.fromYear = 1204;
-    instant.toYear = 1204;
+    instant.fromDay = lpl::history::dayOfDate(1204, 6u, 18u);
+    instant.toDay = instant.fromDay;
     check("an instant covers its own year", lpl::knowledge::matches(lpl::knowledge::Query{}.during(1204), instant));
+    check("and is findable by its own day",
+          lpl::knowledge::matches(lpl::knowledge::Query{}.onDay(instant.fromDay), instant));
+    check("but not by the day before",
+          !lpl::knowledge::matches(lpl::knowledge::Query{}.onDay(instant.fromDay - 1), instant));
 
     check("a confidence floor bites",
           !lpl::knowledge::matches(lpl::knowledge::Query{}.atLeast(40000u), fact) &&
@@ -353,6 +362,79 @@ int main()
     // The project's verdict format, character for character: validate.sh greps for
     // "ALL PASS (0 failure", so a line that says the same thing in another order is a
     // test that passes and is recorded as a failure.
+    std::printf("-- one table for every language, and the aliases a real catalogue writes\n");
+    {
+        using lpl::corpus::LanguageTag;
+        using lpl::corpus::LanguageEra;
+
+        // @warning Every tag must have exactly ONE canonical row. Zero would make `languageName`
+        // answer "unknown" for a language the enumeration names -- and that word goes into an
+        // image, so a corpus would be baked with its language spelled as the absence of one.
+        // Two would make the answer depend on table order.
+        bool everyTagIsNamed = true;
+        bool everyNameParsesBack = true;
+        for (lpl::core::u32 i = 1u; i < static_cast<lpl::core::u32>(LanguageTag::Count); ++i)
+        {
+            const LanguageTag tag = static_cast<LanguageTag>(i);
+            const char *name = lpl::corpus::languageName(tag);
+            if (name == nullptr || std::strcmp(name, "unknown") == 0)
+            {
+                everyTagIsNamed = false;
+                continue;
+            }
+            LanguageTag back = LanguageTag::Unknown;
+            if (!lpl::corpus::languageByName(name, static_cast<lpl::core::u32>(std::strlen(name)), back) ||
+                back != tag)
+                everyNameParsesBack = false;
+        }
+        check("every tag in the enumeration has a canonical word", everyTagIsNamed);
+        check("and every word parses back to the tag it names", everyNameParsesBack);
+
+        // The aliases a real catalogue writes. Measured: HathiTrust and Gutenberg disagree about
+        // which of these they use, and a reader that knew one would drop the other's corpus.
+        struct Alias { const char *word; LanguageTag tag; };
+        static constexpr Alias kAliases[] = {
+            {"lat", LanguageTag::Latin},        {"la", LanguageTag::Latin},
+            {"eng", LanguageTag::ModernEnglish},{"en", LanguageTag::ModernEnglish},
+            {"fre", LanguageTag::ModernFrench}, {"fra", LanguageTag::ModernFrench},
+            {"ger", LanguageTag::German},       {"deu", LanguageTag::German},
+            {"chi", LanguageTag::Chinese},      {"zho", LanguageTag::Chinese},
+        };
+        bool everyAliasResolves = true;
+        for (const Alias &alias : kAliases)
+        {
+            LanguageTag got = LanguageTag::Unknown;
+            if (!lpl::corpus::languageByName(alias.word, static_cast<lpl::core::u32>(std::strlen(alias.word)),
+                                             got) ||
+                got != alias.tag)
+                everyAliasResolves = false;
+        }
+        check("the three-letter codes a catalogue writes resolve too", everyAliasResolves);
+
+        // @warning Fifteen centuries apart, told apart by two table rows. A first version mapped `el`
+        // to AncientGreek, and the catalogue then claimed 216 works of ancient Greek from a source
+        // that declares `grc` zero times.
+        LanguageTag modern = LanguageTag::Unknown;
+        LanguageTag ancient = LanguageTag::Unknown;
+        check("modern Greek is read", lpl::corpus::languageByName("el", 2u, modern));
+        check("ancient Greek is read", lpl::corpus::languageByName("grc", 3u, ancient));
+        check("and they are not the same language",
+              modern == LanguageTag::ModernGreek && ancient == LanguageTag::AncientGreek);
+
+        // @warning The consequence of the era, and the reason it is derived rather than listed: a tag
+        // added without an era would read as "not necessarily a modern rendering", which is the
+        // answer that licenses redistributing a copyrighted translation.
+        check("a modern vernacular is a modern rendering", lpl::corpus::isModernRendering(LanguageTag::German));
+        check("an ancient language is not", !lpl::corpus::isModernRendering(LanguageTag::Latin));
+        // A living language with an ancient literature is neither, and that is the honest answer.
+        check("and a living language with an ancient literature claims neither",
+              lpl::corpus::languageEra(LanguageTag::Arabic) == LanguageEra::Unspecified &&
+                  !lpl::corpus::isModernRendering(LanguageTag::Arabic));
+
+        check("an unknown word is refused, never defaulted",
+              !lpl::corpus::languageByName("qqq", 3u, modern));
+    }
+
     std::printf("\n%s (%d failures, %d checks)\n", gFailures == 0 ? "ALL PASS" : "FAILURES", gFailures, gChecks);
     return gFailures == 0 ? 0 : 1;
 }

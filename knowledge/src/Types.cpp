@@ -26,6 +26,12 @@ const char *sectionTypeName(SectionType type) noexcept
     case SectionType::Loci: return "loci";
     case SectionType::Texts: return "texts";
     case SectionType::Ecc: return "ecc";
+    case SectionType::Catalogue: return "catalogue";
+    case SectionType::Gazetteer: return "gazetteer";
+    case SectionType::Candidate: return "candidate";
+    case SectionType::Attribution: return "attribution";
+    case SectionType::PlaceLink: return "place-link";
+    case SectionType::Relief: return "relief";
     }
     // Not a fallthrough for tidiness: a section type this build has never heard of is the
     // NORMAL case for an image from a newer writer, and reporting it as unknown is how the

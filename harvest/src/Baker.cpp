@@ -58,16 +58,16 @@ void pushWord(std::vector<core::u8> &out, core::u32 value)
 {
     if (a.subject != b.subject)
         return a.subject < b.subject;
-    if (a.fromYear != b.fromYear)
-        return a.fromYear < b.fromYear;
+    if (a.fromDay != b.fromDay)
+        return a.fromDay < b.fromDay;
     if (a.predicate != b.predicate)
         return a.predicate < b.predicate;
     if (a.object != b.object)
         return a.object < b.object;
     if (a.source != b.source)
         return a.source < b.source;
-    if (a.toYear != b.toYear)
-        return a.toYear < b.toYear;
+    if (a.toDay != b.toDay)
+        return a.toDay < b.toDay;
     return a.confidenceRaw < b.confidenceRaw;
 }
 
@@ -75,10 +75,10 @@ void pushWord(std::vector<core::u8> &out, core::u32 value)
 
 bool Baker::name(core::u32 id, std::string_view text)
 {
-    for (Named &entry : _names)
+    const auto at = _byIdentifier.find(id);
+    if (at != _byIdentifier.end())
     {
-        if (entry.id != id)
-            continue;
+        Named &entry = _names[at->second];
         if (entry.text == text)
             return true; // named twice with the same word: idempotent, not a problem
         ++_collisions;
@@ -86,6 +86,7 @@ bool Baker::name(core::u32 id, std::string_view text)
             _firstCollision = entry.text + " / " + std::string{text};
         return false;
     }
+    _byIdentifier.emplace(id, _names.size());
     _names.push_back(Named{id, std::string{text}});
     return true;
 }
@@ -111,6 +112,11 @@ core::u32 Baker::addLocus(core::u32 documentIndex, const corpus::Locus &locus)
 }
 
 void Baker::addSource(const knowledge::SourceV1 &source) { _sources.push_back(source); }
+
+void Baker::addCatalogueEntry(const knowledge::CatalogueEntryV1 &entry)
+{
+    _catalogue.push_back(entry);
+}
 
 void Baker::addFact(const knowledge::FactV1 &fact) { _facts.push_back(fact); }
 
@@ -184,6 +190,12 @@ bool Baker::build(std::vector<core::u8> &out, BakeReport &report) const
         pushWord(sources, source.agreements);
         pushWord(sources, source.name);
         pushWord(sources, source.document);
+        // The composition window, in the same order the reader casts it back. Two more words
+        // rather than a new section: this is not optional information about a source, it is part
+        // of what a source IS, and a section exists for what is consumed separately.
+        pushWord(sources, static_cast<core::u32>(source.composedFrom));
+        pushWord(sources, static_cast<core::u32>(source.composedTo));
+        pushWord(sources, source.flags);
     }
 
     std::vector<core::u8> factBytes;
@@ -192,8 +204,8 @@ bool Baker::build(std::vector<core::u8> &out, BakeReport &report) const
         pushWord(factBytes, fact.subject);
         pushWord(factBytes, fact.predicate);
         pushWord(factBytes, fact.object);
-        pushWord(factBytes, static_cast<core::u32>(fact.fromYear));
-        pushWord(factBytes, static_cast<core::u32>(fact.toYear));
+        pushWord(factBytes, static_cast<core::u32>(fact.fromDay));
+        pushWord(factBytes, static_cast<core::u32>(fact.toDay));
         pushWord(factBytes, fact.source);
         pushWord(factBytes, fact.confidenceRaw);
         pushWord(factBytes, fact.locus);
@@ -233,6 +245,67 @@ bool Baker::build(std::vector<core::u8> &out, BakeReport &report) const
         texts.insert(texts.end(), body.begin(), body.end());
     }
 
+    std::vector<core::u8> catalogue;
+    if (!_catalogue.empty())
+    {
+        pushWord(catalogue, static_cast<core::u32>(_catalogue.size()));
+        pushWord(catalogue, 0u); // reserved
+        for (const knowledge::CatalogueEntryV1 &entry : _catalogue)
+        {
+            pushWord(catalogue, entry.title);
+            pushWord(catalogue, entry.creator);
+            pushWord(catalogue, entry.address);
+            pushWord(catalogue, entry.holder);
+            pushWord(catalogue, static_cast<core::u32>(entry.year));
+            pushWord(catalogue, entry.language);
+            pushWord(catalogue, entry.flags);
+            pushWord(catalogue, entry.cluster);
+            pushWord(catalogue, static_cast<core::u32>(entry.yearTo));
+        }
+    }
+
+    std::vector<core::u8> gazetteer;
+    if (!_gazetteer.empty())
+    {
+        pushWord(gazetteer, static_cast<core::u32>(_gazetteer.size()));
+        pushWord(gazetteer, 0u); // reserved
+        for (const knowledge::GazetteerEntryV1 &entry : _gazetteer)
+        {
+            pushWord(gazetteer, entry.place);
+            pushWord(gazetteer, entry.title);
+            pushWord(gazetteer, static_cast<core::u32>(entry.latRaw));
+            pushWord(gazetteer, static_cast<core::u32>(entry.lonRaw));
+            pushWord(gazetteer, static_cast<core::u32>(entry.minYear));
+            pushWord(gazetteer, static_cast<core::u32>(entry.maxYear));
+            pushWord(gazetteer, entry.flags);
+            pushWord(gazetteer, entry.kinds);
+        }
+    }
+
+    std::vector<core::u8> placeLinks;
+    for (const knowledge::PlaceLinkV1 &link : _placeLinks)
+    {
+        pushWord(placeLinks, link.from);
+        pushWord(placeLinks, link.to);
+    }
+
+    // Emitted before the Texts section is sealed, because each credit becomes a line in it.
+    std::vector<core::u8> attributions;
+    for (const Credited &credit : _credits)
+    {
+        pushWord(attributions, credit.line);
+        pushWord(attributions, credit.covers);
+    }
+
+    std::vector<core::u8> candidates;
+    for (const knowledge::CandidateV1 &candidate : _candidates)
+    {
+        pushWord(candidates, candidate.left);
+        pushWord(candidates, candidate.right);
+        pushWord(candidates, candidate.scoreRaw);
+        pushWord(candidates, candidate.evidence);
+    }
+
     std::vector<core::u8> loci;
     for (const knowledge::LocusV1 &locus : _loci)
     {
@@ -240,6 +313,32 @@ bool Baker::build(std::vector<core::u8> &out, BakeReport &report) const
         pushWord(loci, locus.part);
         pushWord(loci, locus.section);
         pushWord(loci, locus.line);
+    }
+
+    // The relief section: a fixed header then the samples. Written by hand rather than by
+    // memcpy of the struct, for the reason every other section is: a struct copy would bake this
+    // machine's padding and alignment into the wire, and the reader is a different compiler.
+    std::vector<core::u8> relief;
+    if (_hasRelief && !_reliefSamples.empty())
+    {
+        pushWord(relief, _relief.width);
+        pushWord(relief, _relief.height);
+        pushWord(relief, static_cast<core::u32>(_relief.originCellX));
+        pushWord(relief, static_cast<core::u32>(_relief.originCellZ));
+        pushWord(relief, static_cast<core::u32>(_relief.latitudeRaw));
+        pushWord(relief, static_cast<core::u32>(_relief.longitudeRaw));
+        pushWord(relief, static_cast<core::u32>(_relief.referenceLatitude));
+        pushWord(relief, _relief.metresPerCell);
+        pushWord(relief, static_cast<core::u32>(_relief.unitsPerMetreRaw));
+        pushWord(relief, static_cast<core::u32>(_relief.seaLevelUnitsRaw));
+        pushWord(relief, _relief.blendCells);
+        pushWord(relief, _reliefExposedEdges);
+        for (const core::i16 sample : _reliefSamples)
+        {
+            const auto word = static_cast<core::u16>(sample);
+            relief.push_back(static_cast<core::u8>(word & 0xFFu));
+            relief.push_back(static_cast<core::u8>((word >> 8) & 0xFFu));
+        }
     }
 
     struct Pending {
@@ -257,6 +356,12 @@ bool Baker::build(std::vector<core::u8> &out, BakeReport &report) const
         {knowledge::SectionType::Documents, &documents},
         {knowledge::SectionType::Loci, &loci},
         {knowledge::SectionType::Texts, &texts},
+        {knowledge::SectionType::Catalogue, &catalogue},
+        {knowledge::SectionType::Gazetteer, &gazetteer},
+        {knowledge::SectionType::PlaceLink, &placeLinks},
+        {knowledge::SectionType::Candidate, &candidates},
+        {knowledge::SectionType::Attribution, &attributions},
+        {knowledge::SectionType::Relief, &relief},
     };
 
     core::u32 sectionCount = 0u;
@@ -334,6 +439,9 @@ bool Baker::build(std::vector<core::u8> &out, BakeReport &report) const
     report.vocabulary = static_cast<core::u32>(names.size());
     report.textLines = static_cast<core::u32>(_texts.size());
     report.textBytes = texts.empty() ? 0u : static_cast<core::u32>(texts.size());
+    report.catalogue = static_cast<core::u32>(_catalogue.size());
+    report.gazetteer = static_cast<core::u32>(_gazetteer.size());
+    report.placeLinks = static_cast<core::u32>(_placeLinks.size());
     report.sections = sectionCount;
     report.bytes = totalSize;
     return true;

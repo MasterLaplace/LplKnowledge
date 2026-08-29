@@ -116,6 +116,10 @@ if LPL_FOUNDATION_AVAILABLE then
         set_kind("static")
         set_group("modules")
         add_files(path.join(kFoundationRoot, "math/src/Cordic.cpp"))
+        -- The projection: degrees to cells, metres to world units. It lives in math/ because that
+        -- is the only layer both repositories can see -- see lpl/math/Geo.hpp for why procgen and
+        -- history were each a violation or a cycle.
+        add_files(path.join(kFoundationRoot, "math/src/Geo.cpp"))
         add_files(path.join(kFoundationRoot, "memory/src/ArenaAllocator.cpp"))
         add_files(path.join(kFoundationRoot, "core/src/Log.cpp"))
         add_files(path.join(kFoundationRoot, "history/src/Attestation.cpp"))

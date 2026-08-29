@@ -12,7 +12,7 @@
  * would have a failure mode (out of memory) on a path whose whole job is to survive
  * a bad input.
  *
- * ⚠ Alignment is VALIDATED, not assumed. Every section offset must be a multiple of
+ * @warning Alignment is VALIDATED, not assumed. Every section offset must be a multiple of
  * four, and @ref KnowledgePack::open refuses an image where one is not. x86 would have
  * read a misaligned record without complaining, which is exactly why the check has to
  * be explicit: the target that tolerates the mistake is the target that hides it until
@@ -138,6 +138,64 @@ public:
     [[nodiscard]] core::u32 sourceCount() const noexcept { return _sourceCount; }
 
     /**
+     * @brief Pairs somebody should look at, none of them merged.
+     *
+     * @return How many.
+     */
+    [[nodiscard]] core::u32 candidateCount() const noexcept { return _candidateCount; }
+
+    /**
+     * @brief Credits this image must carry to be redistributable.
+     *
+     * @return How many.
+     */
+    [[nodiscard]] core::u32 attributionCount() const noexcept { return _attributionCount; }
+
+    /**
+     * @brief Reads one credit.
+     *
+     * @param index Zero-based.
+     * @param out   Receives it.
+     * @return false when the index is past the end.
+     */
+    [[nodiscard]] bool attributionAt(core::u32 index, AttributionV1 &out) const noexcept;
+
+    /**
+     * @brief Reads one candidate pair.
+     *
+     * @param index Zero-based.
+     * @param out   Receives it.
+     * @return false when the index is past the end.
+     */
+    [[nodiscard]] bool candidateAt(core::u32 index, CandidateV1 &out) const noexcept;
+
+    /**
+     * @brief Whether the image carries measured ground.
+     *
+     * @return true when a relief section is present and consistent.
+     */
+    [[nodiscard]] bool hasRelief() const noexcept { return _relief != nullptr; }
+
+    /**
+     * @brief Reads the relief header: the projection and the shape of the samples.
+     *
+     * @param out Receives it.
+     * @return false when the image carries no relief.
+     */
+    [[nodiscard]] bool relief(ReliefV1 &out) const noexcept;
+
+    /**
+     * @brief The samples themselves, `width * height` of them, north row first.
+     *
+     * @warning Non-owning, and pointing straight into the mapped image. In ring 0 this is a window
+     * onto a section that was never copied, which is the whole reason the format stores them
+     * already resampled onto cells.
+     *
+     * @return The first sample, or nullptr when the image carries no relief.
+     */
+    [[nodiscard]] const core::i16 *reliefSamples() const noexcept { return _reliefSamples; }
+
+    /**
      * @brief One source profile.
      *
      * @param index Which source, in baked order.
@@ -208,6 +266,83 @@ public:
     [[nodiscard]] core::u32 vocabularyCount() const noexcept { return _vocabularyCount; }
 
     /**
+     * @brief How many catalogue entries the image carries.
+     *
+     * @return The count; zero when the image has no catalogue, which is the normal case for
+     *         an image of facts rather than of holdings.
+     */
+    [[nodiscard]] core::u32 catalogueCount() const noexcept { return _catalogueCount; }
+
+    /**
+     * @brief Reads one catalogue entry.
+     *
+     * @param index Zero-based.
+     * @param out   Receives the entry.
+     * @return false when @p index is past the end.
+     */
+    [[nodiscard]] bool catalogueAt(core::u32 index, CatalogueEntryV1 &out) const noexcept;
+
+    /**
+     * @brief How many named places the image carries.
+     *
+     * @return The count; zero when it holds no gazetteer.
+     */
+    [[nodiscard]] core::u32 gazetteerCount() const noexcept { return _gazetteerCount; }
+
+    /**
+     * @brief Reads one place.
+     *
+     * @param index Zero-based.
+     * @param out   Receives the entry.
+     * @return false when @p index is past the end.
+     */
+    [[nodiscard]] bool gazetteerAt(core::u32 index, GazetteerEntryV1 &out) const noexcept;
+
+    /**
+     * @brief Finds a place by its repository identifier.
+     *
+     * @warning By identifier, never by name: ten distinct places are called "Alexandria". A linear scan
+     * because a gazetteer is tens of thousands of rows, not millions, and a second index would be
+     * a second structure to keep true.
+     *
+     * @param place The identifier.
+     * @param out   Receives the entry.
+     * @return false when no entry carries it.
+     */
+    [[nodiscard]] bool placeById(core::u32 place, GazetteerEntryV1 &out) const noexcept;
+
+    /**
+     * @brief How many attested connections the image carries.
+     *
+     * @return The count, both directions included.
+     */
+    [[nodiscard]] core::u32 placeLinkCount() const noexcept { return _placeLinkCount; }
+
+    /**
+     * @brief Reads one connection.
+     *
+     * @param index Zero-based.
+     * @param out   Receives it.
+     * @return false when @p index is past the end.
+     */
+    [[nodiscard]] bool placeLinkAt(core::u32 index, PlaceLinkV1 &out) const noexcept;
+
+    /**
+     * @brief Collects the places a given one connects to.
+     *
+     * @warning Bounded by @p capacity and the overflow is REPORTED, not silently dropped: a traveller
+     * offered three of a crossroads' eight roads would walk a corpus nobody wrote.
+     *
+     * @param place    The identifier to look up.
+     * @param out      Receives the neighbours.
+     * @param capacity Room in @p out.
+     * @param outTotal Receives how many there are, which may exceed @p capacity.
+     * @return How many were written.
+     */
+    [[nodiscard]] core::u32 linksFrom(core::u32 place, core::u32 *out, core::u32 capacity,
+                                      core::u32 &outTotal) const noexcept;
+
+    /**
      * @brief Bytes of the whole image.
      *
      * @return The declared and verified total size.
@@ -259,6 +394,13 @@ private:
     core::u32 _factCount{0u};
     const SourceV1 *_sources{nullptr};
     core::u32 _sourceCount{0u};
+    const AttributionV1 *_attributions{nullptr};
+    core::u32 _attributionCount{0u};
+    const CandidateV1 *_candidates{nullptr};
+    core::u32 _candidateCount{0u};
+
+    const ReliefV1 *_relief{nullptr};       ///< At most one: a world has one ground.
+    const core::i16 *_reliefSamples{nullptr};
     const DocumentV1 *_documents{nullptr};
     core::u32 _documentCount{0u};
     const LocusV1 *_loci{nullptr};
@@ -266,6 +408,12 @@ private:
 
     const VocabularyEntryV1 *_vocabulary{nullptr};
     core::u32 _vocabularyCount{0u};
+    const core::u8 *_catalogue{nullptr};
+    core::u32 _catalogueCount{0u};
+    const core::u8 *_gazetteer{nullptr};
+    core::u32 _gazetteerCount{0u};
+    const core::u8 *_placeLink{nullptr};
+    core::u32 _placeLinkCount{0u};
     const char *_vocabularyText{nullptr};
     core::u32 _vocabularyTextBytes{0u};
 

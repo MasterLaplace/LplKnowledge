@@ -7,6 +7,7 @@
  * @copyright MIT License
  */
 
+#include <lpl/history/Calendar.hpp>
 #include <lpl/harvest/Markdown.hpp>
 
 #include <lpl/corpus/Language.hpp>
@@ -83,7 +84,53 @@ struct Definition {
     return (depth < line.size() && line[depth] == ' ') ? depth : 0u;
 }
 
+/**
+ * @brief Reads a `[^<digits>]` marker at a position.
+ *
+ * @param line     The line.
+ * @param at       Offset of the '['.
+ * @param outNumber Receives the digits, verbatim.
+ * @param outEnd   Receives the offset just past the ']'.
+ * @return false when there is no marker there.
+ */
+[[nodiscard]] bool readFootnoteMarker(std::string_view line, std::size_t at, std::string &outNumber,
+                                      std::size_t &outEnd)
+{
+    if (at + 4u > line.size() || line[at] != '[' || line[at + 1u] != '^')
+        return false;
+    std::size_t i = at + 2u;
+    const std::size_t start = i;
+    while (i < line.size() && line[i] >= '0' && line[i] <= '9')
+        ++i;
+    // Bounded: the input is a harvested file, and a run of forty digits must read as "not a
+    // marker" rather than as some number nobody wrote.
+    if (i == start || i - start > 6u || i >= line.size() || line[i] != ']')
+        return false;
+    outNumber.assign(line.substr(start, i - start));
+    outEnd = i + 1u;
+    return true;
+}
+
 } // namespace
+
+std::string footnoteName(std::string_view canonical, core::u32 chapter, std::string_view number)
+{
+    std::string chapterText;
+    core::u32 value = chapter;
+    do
+    {
+        chapterText.insert(chapterText.begin(), static_cast<char>('0' + (value % 10u)));
+        value /= 10u;
+    } while (value != 0u);
+
+    std::string name{canonical};
+    name += "#ch";
+    name += chapterText;
+    name += "[^";
+    name += std::string{number};
+    name += ']';
+    return name;
+}
 
 bool looksLikeIdentifier(const char *text, core::u32 bytes) noexcept
 {
@@ -156,10 +203,31 @@ bool ingestMarkdown(const std::vector<MarkdownSource> &sources, Baker &baker, In
     };
     std::vector<Citation> citations;
 
+    // Footnotes are kept apart from identifiers because their IDENTITY is built differently —
+    // see footnoteName — not because they are a different kind of link. What they assert is
+    // the same relation, so they reuse the same three predicates rather than inventing
+    // parallel ones: a reader asking "where is this defined and who cites it" must not have
+    // to ask twice in two vocabularies.
+    std::map<std::string, Definition> footnotes;
+    struct FootnoteCitation {
+        std::string name;
+        std::string canonical; ///< Which document, so a mention can be told from a reference.
+        core::u32 document;
+        core::u32 locus;
+    };
+    std::vector<FootnoteCitation> footnoteCitations;
+    // Which documents actually USE footnote notation, learned from what they DEFINE — the
+    // same rule that tells `SIM-016` from `SHA-256`, one level up. A document defining no
+    // notes at all is not a document with broken references; its `[^19]` is prose mentioning
+    // a notation. Measured: this project's own CLAUDE.md says "notes [^19] [^20]" while
+    // discussing the book, and reading those as references buries the ones that are real.
+    std::set<std::string> footnoteUsers;
+
     struct Loaded {
         std::string body;
         core::u32 documentIndex;
         core::u32 sourceId;
+        std::string canonical; // needed to name a footnote, whose number is only chapter-local
     };
     std::vector<Loaded> loaded;
     loaded.reserve(sources.size());
@@ -207,7 +275,7 @@ bool ingestMarkdown(const std::vector<MarkdownSource> &sources, Baker &baker, In
         wire.document = documentIndex;
         baker.addSource(wire);
 
-        loaded.push_back(Loaded{std::move(body), documentIndex, urn});
+        loaded.push_back(Loaded{std::move(body), documentIndex, urn, source.canonical});
         ++outReport.documents;
     }
 
@@ -215,6 +283,9 @@ bool ingestMarkdown(const std::vector<MarkdownSource> &sources, Baker &baker, In
     {
         core::u32 lineNumber = 0u;
         core::u32 heading = 0u;
+        // Counted apart from `heading`, which advances at every level: a footnote's number
+        // restarts at each CHAPTER, so only the top-level ordinal can scope it.
+        core::u32 chapter = 0u;
         core::i32 sectionYear = 0;
         bool inFence = false;
 
@@ -241,6 +312,8 @@ bool ingestMarkdown(const std::vector<MarkdownSource> &sources, Baker &baker, In
             if (const core::u32 depth = headingDepth(line); depth != 0u)
             {
                 ++heading;
+                if (depth == 1u)
+                    ++chapter;
                 ++outReport.headings;
                 core::i32 year = 0;
                 if (extractIsoYear(line.data(), static_cast<core::u32>(line.size()), year))
@@ -254,6 +327,53 @@ bool ingestMarkdown(const std::vector<MarkdownSource> &sources, Baker &baker, In
                     // heading is undated, and carrying the previous section's year forward
                     // would date claims by where they happen to sit in a file.
                     sectionYear = 0;
+                }
+            }
+
+            // A DEFINITION is a line that opens with the marker and a colon; that is what
+            // the syntax means, so the rule needs no judgement. Handled before anything else
+            // on the line, and `continue`s: the marker at its head is the note being defined,
+            // not the note citing itself.
+            {
+                const std::size_t first = line.find_first_not_of(" \t");
+                std::string number;
+                std::size_t after = 0u;
+                if (first != std::string_view::npos && readFootnoteMarker(line, first, number, after) &&
+                    after < line.size() && line[after] == ':')
+                {
+                    const std::string name = footnoteName(entry.canonical, chapter, number);
+                    const core::u32 locus =
+                        baker.addLocus(entry.documentIndex, corpus::lineLocus(heading, lineNumber));
+                    if (footnotes.find(name) == footnotes.end())
+                    {
+                        footnotes[name] = Definition{entry.sourceId, locus, sectionYear,
+                                                     std::string{line.substr(after + 1u)}};
+                        footnoteUsers.insert(entry.canonical);
+                        ++outReport.footnotes;
+                    }
+                    else
+                    {
+                        // Two notes with one number in one chapter. Counted with the other
+                        // duplicates, because the consequence is identical: a citation that
+                        // cannot say which of them it meant.
+                        ++outReport.duplicates;
+                        if (outReport.firstDuplicate.empty())
+                            outReport.firstDuplicate = name;
+                    }
+                    continue;
+                }
+            }
+
+            for (std::size_t i = 0u; i < line.size(); ++i)
+            {
+                std::string number;
+                std::size_t after = 0u;
+                if (line[i] == '[' && readFootnoteMarker(line, i, number, after))
+                {
+                    footnoteCitations.push_back(FootnoteCitation{
+                        footnoteName(entry.canonical, chapter, number), entry.canonical, entry.sourceId,
+                        baker.addLocus(entry.documentIndex, corpus::lineLocus(heading, lineNumber))});
+                    i = after - 1u;
                 }
             }
 
@@ -318,8 +438,8 @@ bool ingestMarkdown(const std::vector<MarkdownSource> &sources, Baker &baker, In
         // IS, so a claim naming one stays true if the image is rebaked with the files in
         // another order.
         fact.object = entry.second.document;
-        fact.fromYear = entry.second.year;
-        fact.toYear = entry.second.year;
+        fact.fromDay = lpl::history::firstDayOfYear(entry.second.year);
+        fact.toDay = lpl::history::lastDayOfYear(entry.second.year);
         // The source is the document the definition sits in, which is the whole point of
         // provenance here: an identifier is worth exactly what the document defining it is
         // worth.
@@ -335,12 +455,85 @@ bool ingestMarkdown(const std::vector<MarkdownSource> &sources, Baker &baker, In
         words.subject = subject;
         words.predicate = kPredicateDefinitionText;
         words.object = baker.addText(entry.second.line);
-        words.fromYear = entry.second.year;
-        words.toYear = entry.second.year;
+        words.fromDay = lpl::history::firstDayOfYear(entry.second.year);
+        words.toDay = lpl::history::lastDayOfYear(entry.second.year);
         words.source = entry.second.document;
         words.locus = entry.second.locus;
         words.confidenceRaw = 65536u;
         baker.addFact(words);
+    }
+
+    // ── Footnotes ─────────────────────────────────────────────────────────────
+    // Emitted with the same three predicates as an identifier, because the relation is the
+    // same one. What differs is the identity — chapter-scoped, see footnoteName — and that
+    // difference is invisible here on purpose: a query for "what cites this" must not need
+    // to know which notation a link was written in.
+    for (const auto &entry : footnotes)
+    {
+        const core::u32 subject =
+            corpus::nameIdentifier(entry.first.data(), static_cast<core::u32>(entry.first.size()));
+        if (!baker.name(subject, entry.first))
+            return false;
+
+        knowledge::FactV1 fact{};
+        fact.subject = subject;
+        fact.predicate = kPredicateDefinedIn;
+        fact.object = entry.second.document;
+        fact.fromDay = lpl::history::firstDayOfYear(entry.second.year);
+        fact.toDay = lpl::history::lastDayOfYear(entry.second.year);
+        fact.source = entry.second.document;
+        fact.locus = entry.second.locus;
+        fact.confidenceRaw = 65536u;
+        baker.addFact(fact);
+
+        // The note's words, carried alongside — which for a book is the whole point: a
+        // reader holding the image holds what note 19 of chapter 7 actually says, and never
+        // has to open three hundred kilobytes of markdown to find out.
+        knowledge::FactV1 words{};
+        words.subject = subject;
+        words.predicate = kPredicateDefinitionText;
+        words.object = baker.addText(entry.second.line);
+        words.fromDay = lpl::history::firstDayOfYear(entry.second.year);
+        words.toDay = lpl::history::lastDayOfYear(entry.second.year);
+        words.source = entry.second.document;
+        words.locus = entry.second.locus;
+        words.confidenceRaw = 65536u;
+        baker.addFact(words);
+    }
+
+    for (const FootnoteCitation &citation : footnoteCitations)
+    {
+        if (footnoteUsers.find(citation.canonical) == footnoteUsers.end())
+        {
+            // Prose mentioning the notation, in a document that has no notes. Counted apart,
+            // because folding it into `dangling` is what buries the references that really
+            // are broken.
+            ++outReport.footnoteNoise;
+            continue;
+        }
+        ++outReport.footnoteCitations;
+
+        if (footnotes.find(citation.name) == footnotes.end())
+        {
+            // A note referenced where its chapter defines none. Counted and NOT written, the
+            // same refusal a dangling identifier gets: an image asserting that a note nothing
+            // defines is cited somewhere is true and useless.
+            ++outReport.danglingFootnotes;
+            if (outReport.firstDangling.empty())
+                outReport.firstDangling = citation.name;
+            continue;
+        }
+
+        const core::u32 subject =
+            corpus::nameIdentifier(citation.name.data(), static_cast<core::u32>(citation.name.size()));
+        knowledge::FactV1 fact{};
+        fact.subject = subject;
+        fact.predicate = kPredicateCitedIn;
+        fact.object = citation.document;
+        fact.source = citation.document;
+        fact.confidenceRaw = 65536u;
+        fact.locus = citation.locus;
+        baker.addFact(fact);
     }
 
     // Which prefixes are real schemes, learned from what the corpus DEFINES. `SHA-256` has

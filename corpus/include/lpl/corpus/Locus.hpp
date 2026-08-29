@@ -10,7 +10,7 @@
  * when a file is touched is a citation nobody can check a year later. Three ordinals
  * survive all of that.
  *
- * ⚠ A CTS passage has a depth that VARIES BY WORK — a poem cites one level, a history
+ * @warning A CTS passage has a depth that VARIES BY WORK — a poem cites one level, a history
  * three — so the mapping from depth to these three fields is stated once, here, and
  * nowhere else. Getting it stated in two places would mean the same passage naming two
  * different positions depending on which parser saw it.

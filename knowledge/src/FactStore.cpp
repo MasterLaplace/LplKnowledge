@@ -90,8 +90,8 @@ core::u32 FactStore::foldPage(const Page &page) noexcept
         foldWord(hash, row.subject);
         foldWord(hash, row.predicate);
         foldWord(hash, row.object);
-        foldWord(hash, static_cast<core::u32>(row.fromYear));
-        foldWord(hash, static_cast<core::u32>(row.toYear));
+        foldWord(hash, static_cast<core::u32>(row.fromDay));
+        foldWord(hash, static_cast<core::u32>(row.toDay));
         foldWord(hash, row.source);
         foldWord(hash, row.confidenceRaw);
         foldWord(hash, row.locus);

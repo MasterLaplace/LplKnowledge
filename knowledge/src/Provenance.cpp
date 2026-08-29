@@ -9,6 +9,10 @@
 
 #include <lpl/knowledge/Provenance.hpp>
 
+// One declaration of "nobody established this", owned by the module that defines what it MEANS
+// for a trust score. A copy here would be a second constant free to drift from the first.
+#include <lpl/history/Fact.hpp>
+
 namespace lpl::knowledge {
 
 namespace {
@@ -124,9 +128,21 @@ core::u32 renderCitation(const Citation &citation, char *out, core::u32 capacity
 
     appendText(out, capacity, cursor, " (");
     appendText(out, capacity, cursor, kindText(citation.source.kind));
-    appendText(out, capacity, cursor, ", +");
-    appendNumber(out, capacity, cursor, citation.source.yearsAfterEvent);
-    appendText(out, capacity, cursor, "y)");
+    // @warning An unestablished distance is SAID, never printed. The sentinel is 0xFFFFFFFF and a
+    // citation rendered it literally -- "(chronicle, +4294967295y)" -- which is not merely ugly:
+    // a reader weighing sources sees a number where the honest answer is that nobody knows, and
+    // the number happens to look like the most distant source imaginable. Same class as a text
+    // line printed as "#7": a value that means "absent" must not be shown as a value.
+    if (citation.source.yearsAfterEvent == history::kUnknownYearsAfterEvent)
+    {
+        appendText(out, capacity, cursor, ", distance unknown)");
+    }
+    else
+    {
+        appendText(out, capacity, cursor, ", +");
+        appendNumber(out, capacity, cursor, citation.source.yearsAfterEvent);
+        appendText(out, capacity, cursor, "y)");
+    }
 
     if (citation.hasDocument != 0u)
     {

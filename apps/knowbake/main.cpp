@@ -7,7 +7,7 @@
  * bounded query, and allocates nothing. The same discipline that lets a 148-byte
  * cartridge rebuild a world.
  *
- * ⚠ The caller-side sketch that stood here named `lpl::graph::PossibleWorld` and
+ * @warning The caller-side sketch that stood here named `lpl::graph::PossibleWorld` and
  * `lpl::harvest::Store`. It was written before `lpl::history` existed, and it is the sketch
  * that gave way: possible worlds are `history::WorldView` and are not a bake-time concern at
  * all, because an image carries every source and a WorldView decides AT READ TIME which of
@@ -29,7 +29,11 @@
 #include <lpl/harvest/Baker.hpp>
 #include <lpl/knowledge/KnowledgePack.hpp>
 
+#include <lpl/harvest/Relief.hpp>
+#include <lpl/harvest/ReliefStreamer.hpp>
+
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <string>
 #include <vector>
@@ -43,6 +47,9 @@ void usage()
 {
     std::fprintf(stderr, "usage: lpl-knowbake --parity <out.lplknow>\n"
                          "       lpl-knowbake --header <symbol> - <out.hpp>\n"
+                         "       lpl-knowbake --relief-header <tile.hgt> <reduce> <cells> <out.hpp>\n"
+                         "       lpl-knowbake --relief-walk <base> <tileCells> <steps>\n"
+                         "       lpl-knowbake --relief-bake <tile.hgt> <reduce> <tileCells> <base>\n"
                          "\n"
                          "  --parity   bake the canonical corpus of gate P13 into an image\n"
                          "  --header   emit that image as a C++ byte array; '-' means the parity\n"
@@ -203,6 +210,271 @@ void usage()
 
 } // namespace
 
+/**
+ * @brief Emits a window of real ground as a C++ array the kernel can hold.
+ *
+ * @warning **A raw array and not a `.lplknow` image, and the reason is the LINK ORDER.** The kernel
+ * links `-lknowledge -lassistant -lengine -lkxx -lk`, and a static archive only satisfies references
+ * already pending when the linker reaches it -- so `libengine`, which is where a World lives, cannot
+ * call into `libknowledge`. A world that wanted to open an image would have to be relinked ahead of
+ * the reader, which is a much larger decision than showing a landscape. The wire format is exercised
+ * host-side instead, in `test-relief`.
+ *
+ * @warning **Regenerable, which is the whole point of it being a tool mode.** Two checked-in cartridges
+ * in this project drifted into two different hand-edited layouts precisely because their freshness
+ * was verified and nothing could refresh them.
+ *
+ * @param path    A `.hgt` tile.
+ * @param reduce  Integer reduction factor; must divide the tile's intervals.
+ * @param cells   Side of the window taken from the reduced tile.
+ * @param symbol  C++ identifier prefix.
+ * @param out     Header to write.
+ * @return false on any failure, each named on stderr.
+ */
+bool writeReliefHeader(const char *path, unsigned reduce, unsigned cells, const char *out)
+{
+    lpl::harvest::ReliefTile tile;
+    lpl::harvest::ReliefReadReport report{};
+    if (!lpl::harvest::readHeightTile(path, tile, report))
+    {
+        std::fprintf(stderr, "lpl-knowbake: cannot read tile %s\n", path);
+        return false;
+    }
+    lpl::harvest::ReliefTile reduced;
+    if (!lpl::harvest::reduceTile(tile, reduce, reduced))
+    {
+        std::fprintf(stderr, "lpl-knowbake: reduce %u does not divide %u intervals\n", reduce,
+                     tile.side - 1u);
+        return false;
+    }
+    if (cells == 0u || cells > reduced.side)
+    {
+        std::fprintf(stderr, "lpl-knowbake: %u cells does not fit in a reduced side of %u\n", cells,
+                     reduced.side);
+        return false;
+    }
+
+    // The window is taken from the tile's NORTH-WEST corner, which is where its first sample is, so
+    // the array's row order is the tile's row order and nothing is mirrored on the way out.
+    long lowest = 0;
+    long highest = 0;
+    unsigned gaps = 0u;
+    bool any = false;
+    std::string body;
+    for (unsigned r = 0u; r < cells; ++r)
+    {
+        body += "    ";
+        for (unsigned c = 0u; c < cells; ++c)
+        {
+            const lpl::core::i16 metres = reduced.at(r, c);
+            if (metres == lpl::harvest::kReliefVoid)
+                ++gaps;
+            else
+            {
+                if (!any || metres < lowest)
+                    lowest = metres;
+                if (!any || metres > highest)
+                    highest = metres;
+                any = true;
+            }
+            char cell[16];
+            std::snprintf(cell, sizeof(cell), "%d,", static_cast<int>(metres));
+            body += cell;
+        }
+        body += "\n";
+    }
+
+    std::string text =
+        "/**\n"
+        " * @file ReliefBlob.hpp\n"
+        " * @brief A window of REAL ground, so a world can stand on measured earth in ring 0.\n"
+        " *\n"
+        " * @warning GENERATED. Do not hand-edit -- regenerate with the command below. Two checked-in\n"
+        " * cartridges in this project drifted into two different hand-maintained layouts because their\n"
+        " * freshness was checked and nothing could refresh them.\n"
+        " *\n"
+        " * @warning A raw array rather than a `.lplknow` image because the kernel links\n"
+        " * `-lknowledge -lassistant -lengine -lkxx -lk`: a static archive only satisfies references\n"
+        " * already pending when the linker reaches it, so `libengine` -- where a World lives -- cannot\n"
+        " * call the image reader. The wire format is exercised host-side in `test-relief`.\n"
+        " *\n"
+        " * @author MasterLaplace\n"
+        " * @version 0.1.0\n"
+        " * @copyright MIT License\n"
+        " */\n\n"
+        "#pragma once\n\n"
+        "#ifndef LPL_SAMPLES_RELIEFBLOB_HPP\n"
+        "#    define LPL_SAMPLES_RELIEFBLOB_HPP\n\n"
+        "#    include <lpl/core/Types.hpp>\n\n"
+        "namespace lpl::samples {\n\n";
+
+    // @warning The size is checked, not hoped for. snprintf TRUNCATES silently, and a 512-byte buffer
+    // cut this block in the middle of an identifier -- producing a header that still looked like a
+    // header, with `kRelie` followed by a row of samples. It failed to compile, which was luck: a
+    // truncation one character later would have compiled and shipped a wrong constant.
+    char meta[2048];
+    const int metaLength = std::snprintf(meta, sizeof(meta),
+                  "/// Samples per side of the window.\ninline constexpr core::u32 kReliefBlobSide = %uu;\n"
+                  "/// Ground one sample covers, in metres: one arc-second times the reduction.\n"
+                  "inline constexpr core::u32 kReliefBlobMetresPerCell = %uu;\n"
+                  "/// South-west corner of the source tile, in whole degrees.\n"
+                  "inline constexpr core::i32 kReliefBlobSouthLatitude = %d;\n"
+                  "inline constexpr core::i32 kReliefBlobWestLongitude = %d;\n"
+                  "/// Range actually present, in metres. Bathymetry makes the low end negative.\n"
+                  "inline constexpr core::i32 kReliefBlobLowest = %ld;\n"
+                  "inline constexpr core::i32 kReliefBlobHighest = %ld;\n"
+                  "/// Samples nobody measured. Carried through, never filled.\n"
+                  "inline constexpr core::u32 kReliefBlobGaps = %uu;\n\n"
+                  "/// Elevation in metres, row-major, NORTH row first.\ninline constexpr core::i16 kReliefBlobSamples[] = {\n",
+                  cells, 30u * reduce, tile.southLatitude, tile.westLongitude, lowest, highest, gaps);
+    if (metaLength < 0 || static_cast<std::size_t>(metaLength) >= sizeof(meta))
+    {
+        std::fprintf(stderr, "lpl-knowbake: header metadata does not fit in %zu bytes\n", sizeof(meta));
+        return false;
+    }
+    text += meta;
+    text += body;
+    text += "};\n\n} // namespace lpl::samples\n\n#endif // LPL_SAMPLES_RELIEFBLOB_HPP\n";
+
+    std::FILE *file = std::fopen(out, "wb");
+    if (file == nullptr)
+    {
+        std::fprintf(stderr, "lpl-knowbake: cannot write %s\n", out);
+        return false;
+    }
+    std::fwrite(text.data(), 1u, text.size(), file);
+    std::fclose(file);
+    std::printf("wrote %s (%u x %u cells at %u m, %ld..%ld m, %u gaps, %zu bytes of source)\n", out,
+                cells, cells, 30u * reduce, lowest, highest, gaps, text.size());
+    return true;
+}
+
+/**
+ * @brief Walks a baked survey and reports what streaming it costs.
+ *
+ * @warning **The consumer `math::planReliefResidency` and `harvest::ReliefStreamer` did not have.** A
+ * residency policy nothing executes is a feature that cannot be wrong, and a streamer nothing drives
+ * is a bound nobody has paid. This walks a real bake and says how many tiles were mapped, how many
+ * released, and -- the number that matters -- how many steps found no ground under them.
+ *
+ * @param base      Path without extension, as `reliefTilePath` names the parts.
+ * @param tileCells The size the survey was baked with. See `ReliefStreamer::configure`.
+ * @param steps     How far to walk, in cells.
+ * @return false when the survey answered for nothing at all, which means the bake or the path is
+ *         wrong rather than that the walk went badly.
+ */
+bool walkRelief(const char *base, unsigned tileCells, unsigned steps)
+{
+    lpl::math::ReliefResidencyParams residency{};
+    // @warning The size the survey was BAKED with, not a default. A plan in a lattice the bake never
+    // used asks for files that are not there, so the walk finds no ground and calls it missing --
+    // which reads exactly like walking off the edge of the survey rather than like a mismatch.
+    residency.tileCells = tileCells;
+    lpl::harvest::ReliefStreamer streamer;
+    streamer.configure(base, residency);
+
+    unsigned blind = 0u;
+    unsigned answered = 0u;
+    unsigned loaded = 0u;
+    unsigned evicted = 0u;
+    unsigned missing = 0u;
+    unsigned rejected = 0u;
+    unsigned peak = 0u;
+
+    for (unsigned step = 0u; step < steps; ++step)
+    {
+        const lpl::core::i32 x = static_cast<lpl::core::i32>(step);
+        const lpl::harvest::ReliefStreamReport report = streamer.update(x, 0);
+        loaded += report.loaded;
+        evicted += report.evicted;
+        missing += report.missing;
+        rejected += report.rejected;
+        if (report.resident > peak)
+            peak = report.resident;
+        lpl::math::Fixed32 ground{};
+        if (streamer.mosaic().heightAt(x, 0, ground))
+            ++answered;
+        else
+            ++blind;
+    }
+
+    std::printf("walked %u cells: %u answered, %u with no ground, %u tiles loaded, %u released, "
+                "%u missing, %u rejected, peak %u resident, %llu bytes mapped\n",
+                steps, answered, blind, loaded, evicted, missing, rejected, peak,
+                (unsigned long long) streamer.mappedBytes());
+    if (rejected > 0u)
+        std::fprintf(stderr, "lpl-knowbake: %u tile(s) were present but unreadable\n", rejected);
+    return answered > 0u;
+}
+
+/**
+ * @brief Bakes one elevation tile as a tiled survey a streamer can walk.
+ *
+ * @warning The other half of @ref walkRelief: a walk needs something to walk on, and a bake nobody
+ * reads is the orphan this pair exists to close.
+ *
+ * @param path      A `.hgt` tile.
+ * @param reduce    Integer reduction; must divide the tile's intervals.
+ * @param tileCells Cells per output tile side.
+ * @param base      Path without extension for the parts.
+ * @return false on any failure, each named on stderr.
+ */
+bool bakeRelief(const char *path, unsigned reduce, unsigned tileCells, const char *base)
+{
+    lpl::harvest::ReliefTile tile;
+    lpl::harvest::ReliefReadReport report{};
+    if (!lpl::harvest::readHeightTile(path, tile, report))
+    {
+        std::fprintf(stderr, "lpl-knowbake: cannot read tile %s\n", path);
+        return false;
+    }
+    lpl::harvest::ReliefTile reduced;
+    if (!lpl::harvest::reduceTile(tile, reduce, reduced))
+    {
+        std::fprintf(stderr, "lpl-knowbake: reduce %u does not divide %u intervals\n", reduce,
+                     tile.side - 1u);
+        return false;
+    }
+
+    lpl::harvest::ReliefRegion region;
+    if (!lpl::harvest::assembleRegion({reduced}, tile.southLatitude, tile.westLongitude, 1u, 1u,
+                                      reduced.side - 1u, region))
+    {
+        std::fprintf(stderr, "lpl-knowbake: cannot assemble the region\n");
+        return false;
+    }
+
+    lpl::math::GeoProjection spec{};
+    // The tile names its SOUTH-west corner; a projection wants the NORTH-west one, and a tile is
+    // one degree tall.
+    spec.originLatitudeRaw = (tile.southLatitude + 1) * 65536;
+    spec.originLongitudeRaw = tile.westLongitude * 65536;
+    spec.referenceLatitude = tile.southLatitude;
+    spec.metresPerCell = 30u * reduce;
+    spec.unitsPerMetre = lpl::math::Fixed32::fromFloat(0.05f);
+    spec.seaLevelUnits = lpl::math::Fixed32::fromFloat(-1.0f);
+    const lpl::math::ReliefProjection projection = lpl::math::makeReliefProjection(spec);
+
+    lpl::harvest::ReliefTilePlan plan{};
+    plan.tileCells = tileCells;
+    // Enough tiles to cover the degree at this cell size, rounded up: a plan short by one leaves a
+    // strip of the survey unbaked, and a walk across it would find no ground with nothing to say why.
+    const lpl::core::u32 across = (reduced.side + tileCells - 1u) / tileCells;
+    plan.tilesX = across;
+    plan.tilesZ = across;
+
+    lpl::harvest::ReliefBakeReport bake{};
+    if (!lpl::harvest::bakeReliefTiles(base, region, projection, plan, tileCells / 8u,
+                                       lpl::harvest::reliefAttribution(), bake))
+    {
+        std::fprintf(stderr, "lpl-knowbake: the tiled bake failed\n");
+        return false;
+    }
+    std::printf("baked %u tiles (%u empty), %llu bytes, %u cells, %u gaps\n", bake.tilesWritten,
+                bake.tilesEmpty, (unsigned long long) bake.bytesWritten, bake.cells, bake.gaps);
+    return bake.tilesWritten > 0u;
+}
+
 int main(int argc, char **argv)
 {
     if (argc >= 3 && std::strcmp(argv[1], "--parity") == 0)
@@ -217,6 +489,26 @@ int main(int argc, char **argv)
         }
         std::printf("wrote %s\n", argv[2]);
         return 0;
+    }
+
+    if (argc >= 6 && std::strcmp(argv[1], "--relief-bake") == 0)
+        return bakeRelief(argv[2], static_cast<unsigned>(std::atoi(argv[3])),
+                          static_cast<unsigned>(std::atoi(argv[4])), argv[5])
+                   ? 0
+                   : 1;
+
+    if (argc >= 5 && std::strcmp(argv[1], "--relief-walk") == 0)
+        return walkRelief(argv[2], static_cast<unsigned>(std::atoi(argv[3])),
+                          static_cast<unsigned>(std::atoi(argv[4])))
+                   ? 0
+                   : 1;
+
+    if (argc >= 6 && std::strcmp(argv[1], "--relief-header") == 0)
+    {
+        return writeReliefHeader(argv[2], static_cast<unsigned>(std::atoi(argv[3])),
+                                 static_cast<unsigned>(std::atoi(argv[4])), argv[5])
+                   ? 0
+                   : 1;
     }
 
     if (argc >= 5 && std::strcmp(argv[1], "--header") == 0)

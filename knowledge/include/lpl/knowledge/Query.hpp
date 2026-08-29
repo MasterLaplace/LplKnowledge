@@ -28,6 +28,7 @@
 #    define LPL_LPL_KNOWLEDGE_QUERY_HPP
 
 #    include <lpl/Foundation.hpp>
+#    include <lpl/history/Calendar.hpp>
 #    include <lpl/knowledge/Types.hpp>
 
 namespace lpl::knowledge {
@@ -44,6 +45,21 @@ namespace lpl::knowledge {
 inline constexpr core::i32 kAnyYear = -2147483648;
 
 /**
+ * Language sentinel meaning "do not constrain".
+ *
+ * @warning **Not `kNoIdentifier`**, and that distinction is the whole reason this constant exists.
+ * Zero is a MEANINGFUL value of `corpus::LanguageTag` — it is `Unknown` — so a query field
+ * defaulting to zero made "leave the language open" and "find the ones whose language nobody
+ * recorded" the same request, and the second was unaskable. Measured: `--language 0` over
+ * Project Gutenberg returned **79 179 of 79 179** rows while 11 826 of them are in a language
+ * this tag set cannot name, and there was no way to ask for exactly those.
+ *
+ * The same shape as @ref kAnyYear beside it, and for the same reason: a field whose entire range
+ * is meaningful needs a sentinel from OUTSIDE that range, never a value borrowed from inside it.
+ */
+inline constexpr core::u32 kAnyLanguage = 0xFFFFFFFFu;
+
+/**
  * @struct Query
  * @brief What to look for.
  *
@@ -57,8 +73,31 @@ struct Query {
     core::u32 predicate{kNoIdentifier}; ///< Constrain what is claimed.
     core::u32 object{kNoIdentifier};    ///< Constrain the claimed value.
     core::u32 source{kNoIdentifier};    ///< Constrain who asserts it.
-    core::i32 year{kAnyYear};           ///< A year the window must cover.
+    /**
+     * First day the claim's window must reach; @ref kAnyYear for no bound.
+     *
+     * @warning **A pair, because asking about a year is asking about 365 days.** This was a single
+     * `year` compared against `fact.fromDay` -- a year number tested against a day number, so
+     * `during(1204)` asked for day 1204 while the fact covered day 439 000, and every query
+     * returned nothing. The rename from years to days went through the FIELD and stopped at the
+     * caller, which is exactly where a unit change hides.
+     */
+    core::i32 dayFrom{kAnyYear};
+
+    /// Last day it must reach; @ref kAnyYear for no bound.
+    core::i32 dayTo{kAnyYear};
     core::u32 minConfidenceRaw{0u};     ///< Floor on the raw Q16.16 confidence.
+    /**
+     * Constrain WHERE in a document, as a one-based Loci index, or leave it open.
+     *
+     * A passage is a position rather than a thing, so this is how a passage is asked for.
+     * @warning The alternative — minting an identifier per passage and constraining @c subject —
+     * was tried and does not survive contact with a corpus: `nameIdentifier` is 32 bits, and
+     * Perseus alone carries some 700 000 passages, so two of them collided on one identifier
+     * within seconds. `FactV1` already carried both a subject and a locus; the second was the
+     * one that meant "which passage" all along.
+     */
+    core::u32 locus{kNoIdentifier};
 
     /**
      * @brief Rows the caller is willing to receive.
@@ -76,6 +115,18 @@ struct Query {
      * @param id The subject identifier.
      * @return This query, for chaining.
      */
+    /**
+     * @brief Narrows to one position inside a document.
+     *
+     * @param index One-based Loci index, as a fact carries it.
+     * @return This query, for chaining.
+     */
+    Query &at(core::u32 index) noexcept
+    {
+        locus = index;
+        return *this;
+    }
+
     Query &about(core::u32 id) noexcept
     {
         subject = id;
@@ -83,14 +134,36 @@ struct Query {
     }
 
     /**
-     * @brief Narrows to claims whose window covers a year.
+     * @brief Narrows to claims whose window OVERLAPS a year.
+     *
+     * @warning Overlap, not containment, and the whole year rather than a day of it. A claim dated
+     * to a single day inside 1204 is a claim about 1204; so is one spanning 1200 to 1250. Asking
+     * for containment would return the second and drop the first, which is the more precise of
+     * the two.
      *
      * @param value The year.
      * @return This query, for chaining.
      */
     Query &during(core::i32 value) noexcept
     {
-        year = value;
+        dayFrom = history::firstDayOfYear(value);
+        dayTo = history::lastDayOfYear(value);
+        return *this;
+    }
+
+    /**
+     * @brief Narrows to claims whose window covers one exact day.
+     *
+     * The half a year-shaped query cannot express, and the reason the unit changed: a source that
+     * knew a date to the day deserves to be findable by it.
+     *
+     * @param day The day, in the epoch `history::Calendar` defines.
+     * @return This query, for chaining.
+     */
+    Query &onDay(core::i32 day) noexcept
+    {
+        dayFrom = day;
+        dayTo = day;
         return *this;
     }
 
@@ -162,10 +235,90 @@ struct Query {
         return false;
     if (query.minConfidenceRaw != 0u && fact.confidenceRaw < query.minConfidenceRaw)
         return false;
-    // Inclusive at both ends: a claim about the year 1204 covers 1204. A half-open window
-    // would make an instant — fromYear equal to toYear — cover nothing at all.
-    if (query.year != kAnyYear && (query.year < fact.fromYear || query.year > fact.toYear))
+    if (query.locus != kNoIdentifier && fact.locus != query.locus)
         return false;
+    // Inclusive at both ends: a claim about the year 1204 covers 1204. A half-open window
+    // would make an instant — fromDay equal to toDay — cover nothing at all.
+    // Interval overlap in both directions: the query's window and the claim's must share a day.
+    if (query.dayFrom != kAnyYear && fact.toDay < query.dayFrom)
+        return false;
+    if (query.dayTo != kAnyYear && query.dayTo < fact.fromDay)
+        return false;
+    return true;
+}
+
+/**
+ * @struct CatalogueQuery
+ * @brief What to look for among holdings.
+ *
+ * Separate from @ref Query rather than folded into it, and the reason is what the two ask
+ * about. A `Query` asks what is CLAIMED — subject, predicate, source, confidence. A catalogue
+ * claims nothing; it records that a holder says it has a thing. Sharing one struct would put
+ * a confidence floor on a row that has no confidence, and would invite a caller to filter
+ * holdings by a predicate they do not have.
+ *
+ * Every term is an integer comparison, so this belongs beside the reader rather than in the
+ * hosted half: a constrained target that can open an image can also answer "what does this
+ * holder have from before 1800" without a heap.
+ */
+struct CatalogueQuery {
+    core::u32 holder{kNoIdentifier};   ///< Constrain the repository, or leave it open.
+    /**
+     * Constrain the language tag, or @ref kAnyLanguage to leave it open.
+     *
+     * @warning Zero here means `LanguageTag::Unknown` and asks for rows whose language the source did
+     * not state — a real question, and one that used to be impossible to put.
+     */
+    core::u32 language{kAnyLanguage};
+    core::i32 fromDay{kAnyYear};      ///< Earliest year, inclusive.
+    core::i32 toDay{kAnyYear};        ///< Latest year, inclusive.
+    /**
+     * Bits every match must carry, e.g. `kCatalogueFlagPublicDomain`.
+     *
+     * @warning A row with NO year is not a row from year zero, and a filter on years must not quietly
+     * admit it. @ref matchesCatalogue excludes unknown years whenever a bound is stated, so
+     * "published before 1800" never silently means "or undated".
+     */
+    core::u32 requiredFlags{0u};
+    core::u32 forbiddenFlags{0u}; ///< Bits no match may carry.
+    core::u32 limit{16u};         ///< Rows the caller is willing to receive.
+};
+
+/**
+ * @brief Does one holding satisfy a catalogue query?
+ *
+ * @param query What is being looked for.
+ * @param entry The candidate.
+ * @return true when it matches every stated term.
+ */
+[[nodiscard]] constexpr bool matchesCatalogue(const CatalogueQuery &query,
+                                              const CatalogueEntryV1 &entry) noexcept
+{
+    if (query.holder != kNoIdentifier && entry.holder != query.holder)
+        return false;
+    if (query.language != kAnyLanguage && entry.language != query.language)
+        return false;
+    if ((entry.flags & query.requiredFlags) != query.requiredFlags)
+        return false;
+    if ((entry.flags & query.forbiddenFlags) != 0u)
+        return false;
+    // @warning Year zero means UNKNOWN in this record, so a stated bound excludes it rather than
+    // treating it as the year 0. Measured need: 19 605 849 HathiTrust rows all carry a year,
+    // but Gutenberg rows routinely do not, and "before 1800" must not come to include them.
+    if (query.fromDay != kAnyYear || query.toDay != kAnyYear)
+    {
+        if (entry.year == 0)
+            return false;
+        // @warning OVERLAP, not containment. A holding carries a window now, so "published before
+        // 1900" must admit a work whose window starts in 1850 and ends in 1920 -- it may well be
+        // from before 1900, and refusing it would hide exactly the works whose dating is
+        // uncertain, which are the old ones.
+        const core::i32 last = entry.yearTo != 0 ? entry.yearTo : entry.year;
+        if (query.fromDay != kAnyYear && last < query.fromDay)
+            return false;
+        if (query.toDay != kAnyYear && entry.year > query.toDay)  // the window starts too late
+            return false;
+    }
     return true;
 }
 

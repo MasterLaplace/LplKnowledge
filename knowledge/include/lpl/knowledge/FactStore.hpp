@@ -31,7 +31,7 @@ namespace lpl::knowledge {
 /**
  * Rows one page can hold.
  *
- * ⚠ A page is 32 bytes a row, so a page is two kibibytes. That is nothing on a host and
+ * @warning A page is 32 bytes a row, so a page is two kibibytes. That is nothing on a host and
  * it is not nothing on a kernel stack — put one in BSS rather than in a frame, the same
  * way a 1024-entity scene had to be static before it stopped overflowing.
  */

@@ -11,7 +11,7 @@
  * So the mapping from a canonical name to the 32-bit word the engine trades in is here,
  * and only here.
  *
- * ⚠ **The mapping is a 32-bit hash, therefore it collides**, and that is stated up front
+ * @warning **The mapping is a 32-bit hash, therefore it collides**, and that is stated up front
  * because the failure mode is silent and severe: two colliding URNs would merge two people
  * into one, and every claim about either would appear to be a claim about both. A caller
  * that interns a corpus MUST detect collisions and refuse — @ref workIdentifier cannot,
