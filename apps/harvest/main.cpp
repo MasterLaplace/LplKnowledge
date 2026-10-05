@@ -21,6 +21,8 @@
  * @copyright MIT License
  */
 
+#include "Identity.hpp"
+
 #include <lpl/Foundation.hpp>
 
 #include <lpl/harvest/Baker.hpp>
@@ -76,7 +78,9 @@ void usage()
                  "            prints the date to pass next time; that is the whole of\n"
                  "            incremental synchronisation, because OAI-PMH already has it.\n"
                  "  --oai-pages  stop after N responses, for sampling a repository rather\n"
-                 "            than mirroring it. A resumption token is printed to carry on.\n");
+                 "            than mirroring it. A resumption token is printed to carry on.\n"
+                 "  --version  print the version, commit and build of this tool, and the\n"
+                 "            LplPlugin it was built with.\n");
 }
 
 /**
@@ -223,6 +227,12 @@ void usage()
 
 int main(int argc, char **argv)
 {
+    if (argc == 2 && std::strcmp(argv[1], "--version") == 0)
+    {
+        lpl::apps::printIdentity(stdout, "lpl-ingest");
+        return 0;
+    }
+
     // --store is GONE, and its absence is the design rather than a removal. Its job was to
     // gather scattered documents into one place; the author gathered them by MOVING them, so a
     // copy would only be a second version of a file one directory away. What still lives

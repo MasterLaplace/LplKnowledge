@@ -24,6 +24,8 @@
  * @copyright MIT License
  */
 
+#include "Identity.hpp"
+
 #include <lpl/Foundation.hpp>
 
 #include <lpl/harvest/Baker.hpp>
@@ -54,7 +56,9 @@ void usage()
                          "  --parity   bake the canonical corpus of gate P13 into an image\n"
                          "  --header   emit that image as a C++ byte array; '-' means the parity\n"
                          "             corpus, which comes from code and is what makes it the\n"
-                         "             reference rather than a document someone edited\n");
+                         "             reference rather than a document someone edited\n"
+                         "  --version  print the version, commit and build of this tool, and the\n"
+                         "             LplPlugin it was built with\n");
 }
 
 /**
@@ -477,6 +481,12 @@ bool bakeRelief(const char *path, unsigned reduce, unsigned tileCells, const cha
 
 int main(int argc, char **argv)
 {
+    if (argc == 2 && std::strcmp(argv[1], "--version") == 0)
+    {
+        lpl::apps::printIdentity(stdout, "lpl-knowbake");
+        return 0;
+    }
+
     if (argc >= 3 && std::strcmp(argv[1], "--parity") == 0)
     {
         std::vector<lpl::core::u8> image;
