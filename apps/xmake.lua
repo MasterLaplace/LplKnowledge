@@ -21,17 +21,24 @@
 -- rather than pretending to have produced it.
 local kFoundationDeps = LPL_FOUNDATION_AVAILABLE and {"lpl-foundation"} or {}
 
+target("lpl-tool-identity")
+    set_kind("static")
+    add_rules("laplace.identity")
+    add_includedirs(".", {public = true})
+    add_files("Identity.cpp")
+target_end()
+
 target("lpl-ingest")
     set_kind("binary")
     set_group("apps")
-    add_deps("lpl-harvest", "lpl-knowledge", "lpl-corpus", table.unpack(kFoundationDeps))
+    add_deps("lpl-tool-identity", "lpl-harvest", "lpl-knowledge", "lpl-corpus", table.unpack(kFoundationDeps))
     add_files("harvest/main.cpp")
 target_end()
 
 target("lpl-knowbake")
     set_kind("binary")
     set_group("apps")
-    add_deps("lpl-harvest", "lpl-knowledge", "lpl-corpus", table.unpack(kFoundationDeps))
+    add_deps("lpl-tool-identity", "lpl-harvest", "lpl-knowledge", "lpl-corpus", table.unpack(kFoundationDeps))
     add_files("knowbake/main.cpp")
 target_end()
 
@@ -52,6 +59,6 @@ target_end()
 target("lpl-ask")
     set_kind("binary")
     set_group("apps")
-    add_deps("lpl-knowledge", "lpl-corpus", "lpl-harvest", table.unpack(kFoundationDeps))
+    add_deps("lpl-tool-identity", "lpl-knowledge", "lpl-corpus", "lpl-harvest", table.unpack(kFoundationDeps))
     add_files("ask/main.cpp")
 target_end()
