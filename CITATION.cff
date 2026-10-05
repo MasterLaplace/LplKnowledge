@@ -1,0 +1,10 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+title: "LplKnowledge"
+abstract: "The memory of the Laplace project: corpus, index, temporal graph and archive, baked into images a kernel can read."
+authors:
+  - alias: "MasterLaplace"
+    orcid: "https://orcid.org/0009-0006-1371-4119"
+    website: "https://github.com/MasterLaplace"
+repository-code: "https://github.com/MasterLaplace/LplKnowledge"
+license: MIT
