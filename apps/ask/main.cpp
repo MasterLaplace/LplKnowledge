@@ -24,6 +24,8 @@
  * @copyright MIT License
  */
 
+#include "Identity.hpp"
+
 #include <lpl/Foundation.hpp>
 
 #include <lpl/corpus/TextView.hpp>
@@ -71,7 +73,9 @@ void usage()
                          "  --define  takes the identifier BY NAME and prints what it means, where it\n"
                          "            is defined and who cites it. The definition comes out of the\n"
                          "            image, not out of the document — which is what makes an index a\n"
-                         "            rendered view instead of a table somebody maintains.\n");
+                         "            rendered view instead of a table somebody maintains.\n"
+                         "  --version  print the version, commit and build of this tool, and the\n"
+                         "            LplPlugin it was built with.\n");
 }
 
 /**
@@ -347,6 +351,12 @@ void browseOne(const lpl::knowledge::KnowledgePack &pack, const lpl::knowledge::
 
 int main(int argc, char **argv)
 {
+    if (argc == 2 && std::strcmp(argv[1], "--version") == 0)
+    {
+        lpl::apps::printIdentity(stdout, "lpl-ask");
+        return 0;
+    }
+
     if (argc < 2)
     {
         usage();

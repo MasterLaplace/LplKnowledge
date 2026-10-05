@@ -43,7 +43,39 @@ option("foundation")
     set_description("Use the LplPlugin foundation when available (detect|force|off)")
 option_end()
 
-local kFoundationRoot = "../LplKernel/LplPlugin"
+-- LplPlugin is a sibling of this repository. LPLPLUGIN_ROOT names another checkout; the
+-- kernel's submodule path is still tried while it exists (MasterLaplace/LplKernel#431).
+local function foundationRoot()
+    local root = os.getenv("LPLPLUGIN_ROOT")
+    if root and root ~= "" then
+        return root
+    end
+    for _, candidate in ipairs({"../LplPlugin", "../LplKernel/LplPlugin"}) do
+        local candidatePath = path.join(os.scriptdir(), candidate)
+        if os.isdir(path.join(candidatePath, "core/include")) then
+            return candidatePath
+        end
+    end
+    return path.join(os.scriptdir(), "../LplPlugin")
+end
+
+local kProjectRoot = os.scriptdir()
+local kFoundationRoot = foundationRoot()
+local kConfigHeader = path.join(os.scriptdir(), "include/lplknowledge/config.h")
+
+rule("laplace.version")
+    on_load(function (target)
+        local text = io.readfile(kConfigHeader)
+        local version = {}
+        for _, part in ipairs({"MAJOR", "MINOR", "PATCH"}) do
+            table.insert(version, text:match("#define LPLKNOWLEDGE_VERSION_" .. part .. " (%d+)"))
+        end
+        target:set("version", table.concat(version, "."))
+    end)
+rule_end()
+
+add_rules("laplace.version")
+
 
 local function hasFoundation()
     -- Booleans are still handled, because a configuration stored by an older checkout
@@ -80,6 +112,33 @@ add_includedirs("include")
 -- local here is invisible to tests/xmake.lua. Same convention as LplKernel's
 -- LPLPLUGIN_AVAILABLE / LPLASSISTANT_AVAILABLE.
 LPL_FOUNDATION_AVAILABLE = hasFoundation()
+
+local kWithFoundation = LPL_FOUNDATION_AVAILABLE
+
+-- Stamps the one translation unit that prints a tool's identity with what the source cannot
+-- know: the commits this build came from, and the build itself. Only that target recompiles
+-- when a commit changes.
+rule("laplace.identity")
+    on_load(function (target)
+        local function git(directory, arguments)
+            local output = try { function () return os.iorunv("git", table.join({"-C", directory}, arguments)) end }
+            return output and output:trim() or ""
+        end
+        local function commit(directory)
+            local sha = git(directory, {"rev-parse", "--short=7", "HEAD"})
+            if sha == "" then
+                return "unknown"
+            end
+            local dirty = git(directory, {"status", "--porcelain", "--untracked-files=no"})
+            return dirty ~= "" and (sha .. "-dirty") or sha
+        end
+        target:add("defines", 'LPLKNOWLEDGE_COMMIT="' .. commit(kProjectRoot) .. '"')
+        target:add("defines", 'LPLKNOWLEDGE_BUILD="' .. target:plat() .. "." .. (get_config("mode") or "debug") .. '"')
+        if kWithFoundation then
+            target:add("defines", 'LPLPLUGIN_COMMIT="' .. commit(kFoundationRoot) .. '"')
+        end
+    end)
+rule_end()
 
 if LPL_FOUNDATION_AVAILABLE then
     add_includedirs(path.join(kFoundationRoot, "core/include"))
