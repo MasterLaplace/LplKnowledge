@@ -359,7 +359,7 @@ int main()
     testQuery();
     testTextView();
 
-    // The project's verdict format, character for character: validate.sh greps for
+    // The project's verdict format, character for character: the full validation greps for
     // "ALL PASS (0 failure", so a line that says the same thing in another order is a
     // test that passes and is recorded as a failure.
     std::printf("-- one table for every language, and the aliases a real catalogue writes\n");

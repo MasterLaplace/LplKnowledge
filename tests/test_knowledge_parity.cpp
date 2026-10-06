@@ -242,7 +242,7 @@ int main()
                 fold.documents, fold.loci, fold.vocabulary, fold.queryMatched, fold.queryReturned,
                 fold.queryTruncated, fold.consensusObject, fold.provenanceOk, fold.roundTrip, fold.decodeRejected);
 
-    // The project's verdict format, character for character: validate.sh greps for
+    // The project's verdict format, character for character: the full validation greps for
     // "ALL PASS (0 failure", so a line that says the same thing in another order is a
     // test that passes and is recorded as a failure.
     std::printf("\n%s (%d failures, %d checks)\n", gFailures == 0 ? "ALL PASS" : "FAILURES", gFailures, gChecks);

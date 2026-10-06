@@ -16,7 +16,7 @@
  * into the reader's own test proves only that the reader agrees with itself; it cannot catch
  * the writer drifting. The link to the real writer is made elsewhere and on purpose:
  * `test-research-report` in LplAssistant compiles the writer's own assembler and emits a
- * report, and `validate.sh` feeds THAT file to `lpl-ingest`. Neither check is sufficient
+ * report, and the full validation feeds THAT file to `lpl-ingest`. Neither check is sufficient
  * alone, which is why there are two.
  *
  * @author MasterLaplace
