@@ -20,7 +20,7 @@
  * is the same bytes. @warning That order is what a reader scans, so it is also what a caller gets
  * back: a corpus whose authored order differs from the canonical one round-trips as the
  * same SET of claims in a different sequence. It is exact for the canonical corpus because
- * that corpus is already authored in canonical order, which `test-knowledge-parity`
+ * that corpus is already authored in canonical order, which gate P18's `corpus` test
  * asserts rather than assumes.
  *
  * @author MasterLaplace

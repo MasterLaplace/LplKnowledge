@@ -493,16 +493,16 @@
 #if defined(LPL_HAS_FOUNDATION)
     #if defined(__has_include)
         #if !__has_include(<lplplugin/config.h>)
-            #error "LplKnowledge needs LplPlugin 0.2.0 or later, and the LplPlugin found has no lplplugin/config.h: update it"
+            #error "LplKnowledge needs LplPlugin 0.4.0 or later, and the LplPlugin found has no lplplugin/config.h: update it"
         #endif
     #endif
     #include <lplplugin/config.h>
-    #if !LPLPLUGIN_COMPATIBLE_WITH(0, 2, 0)
+    #if !LPLPLUGIN_COMPATIBLE_WITH(0, 4, 0)
         #pragma message("found LplPlugin " LPLPLUGIN_VERSION_STRING)
         #if LPLPLUGIN_VERSION_MAJOR != 0
             #error "LplKnowledge was written for LplPlugin 0.x: read what broke in its CHANGELOG, then adapt"
         #else
-            #error "LplKnowledge needs LplPlugin 0.2.0 or later: update it, or build with --foundation=off"
+            #error "LplKnowledge needs LplPlugin 0.4.0 or later: update it, or build with --foundation=off"
         #endif
     #endif
 #endif

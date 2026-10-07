@@ -43,8 +43,8 @@ namespace lpl::knowledge {
  * @struct KnowledgeFoldResult
  * @brief The signatures the kernel must reproduce.
  *
- * Plain words only, no Fixed32 and no bool, so the kernel copies it field by field
- * exactly as it does for every other fold result.
+ * Plain words only, no Fixed32 and no bool, like every other fold result: every field is
+ * a word a test checks or records, and the kernel's records are compared with the host's.
  */
 struct KnowledgeFoldResult {
     core::u32 imageSignature{0u};      ///< Fold of the image, byte for byte.
@@ -85,9 +85,12 @@ struct KnowledgeFoldResult {
 /**
  * @brief Reads an image, runs the pipeline on it, and folds every stage.
  *
- * One function, called by the host oracle and by the kernel smoke. Takes the image as
- * BYTES rather than reaching for a file or a symbol, so the same code serves a host that
- * just baked one and a kernel that has one in BSS.
+ * One function, which gate P18's test calls on the host and in ring 0. Takes the image as
+ * BYTES rather than reaching for a file or a symbol, so it reads an image wherever it
+ * lives.
+ *
+ * @note Not reentrant: the query's page, two kibibytes, lives in static storage rather than on a
+ *       kernel stack, and gate P18's test calls this from one test at a time.
  *
  * @param image First byte of the image.
  * @param size  How many bytes.
@@ -98,7 +101,7 @@ void foldKnowledgeState(const core::u8 *image, core::u32 size, KnowledgeFoldResu
 /**
  * @brief The canonical query, in one place.
  *
- * A named function rather than a query spelled out in two smokes, for the reason the whole
+ * A named function rather than a query spelled out twice, for the reason the whole
  * project keeps re-learning: two spellings of one question are two questions as soon as one
  * of them is edited.
  *

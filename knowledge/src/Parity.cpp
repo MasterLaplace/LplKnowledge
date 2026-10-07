@@ -131,9 +131,6 @@ void foldKnowledgeState(const core::u8 *image, core::u32 size, KnowledgeFoldResu
     query.about(parityQuerySubject()).during(1204).take(8u);
 
     const FactStore store{pack};
-    // In BSS rather than on the stack: a page is two kibibytes and this function runs in
-    // ring 0, where that is a real fraction of a kernel stack. Static is safe here because
-    // the gate is single-threaded by construction — it runs once, from the smoke battery.
     static Page page;
     store.run(query, page);
     out.pageSignature = FactStore::foldPage(page);
