@@ -53,6 +53,7 @@ enum class OpenStatus : core::u32 {
     Misaligned = 7u,      ///< A section offset is not a multiple of four.
     HashMismatch = 8u,    ///< The content hash does not match the content.
     ShortSection = 9u,    ///< A section is not a whole number of its records.
+    UnterminatedText = 10u, ///< The vocabulary text does not end in a NUL, so textFor would read past it.
 };
 
 /**
