@@ -64,6 +64,7 @@ const char *openStatusText(OpenStatus status) noexcept
     case OpenStatus::Misaligned: return "section misaligned";
     case OpenStatus::HashMismatch: return "content hash mismatch";
     case OpenStatus::ShortSection: return "short section";
+    case OpenStatus::UnterminatedText: return "unterminated vocabulary text";
     }
     return "unknown";
 }
@@ -272,6 +273,13 @@ OpenStatus KnowledgePack::open(const core::u8 *bytes, core::u32 size) noexcept
             // the surplus is bytes nothing describes.
             if (static_cast<core::u32>(sizeof(VocabularyHeaderV1)) + entryBytes + textBytes != length)
                 return OpenStatus::ShortSection;
+            // textFor hands back a pointer into this block as a NUL-terminated C string, so the
+            // block must end in a NUL: without it a crafted image whose last entry points at a run
+            // of non-NUL bytes reading to the section's end makes the lookup read past the section.
+            // Empty text is legitimate only when the section names nothing.
+            if (count != 0u &&
+                (textBytes == 0u || payload[sizeof(VocabularyHeaderV1) + entryBytes + textBytes - 1u] != 0u))
+                return OpenStatus::UnterminatedText;
             _vocabularyCount = count;
             _vocabulary =
                 reinterpret_cast<const VocabularyEntryV1 *>(payload + sizeof(VocabularyHeaderV1));
