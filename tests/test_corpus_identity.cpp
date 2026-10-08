@@ -14,10 +14,13 @@
 #include <lpl/corpus/Locus.hpp>
 #include <lpl/corpus/TextView.hpp>
 #include <lpl/corpus/Urn.hpp>
-#include <lpl/knowledge/FactStore.hpp>
 #include <lpl/knowledge/KnowledgePack.hpp>
-#include <lpl/history/Calendar.hpp>
-#include <lpl/knowledge/Query.hpp>
+
+#if defined(LPL_HAS_FOUNDATION)
+#    include <lpl/history/Calendar.hpp>
+#    include <lpl/knowledge/FactStore.hpp>
+#    include <lpl/knowledge/Query.hpp>
+#endif
 
 #include <cstdio>
 #include <cstring>
@@ -250,6 +253,8 @@ void testReaderRefusals()
     check("a rejection leaves nothing adopted", !pack.ready() && pack.size() == 0u);
 }
 
+#if defined(LPL_HAS_FOUNDATION)
+
 /**
  * @brief Exercises query semantics that need no corpus of substance.
  */
@@ -301,6 +306,18 @@ void testQuery()
     (void) lpl::knowledge::describeQuery(lpl::knowledge::Query{}, described, 128u);
     check("an unconstrained question says so", std::strstr(described, "everything") != nullptr);
 }
+
+#else // standalone build
+
+/**
+ * @brief Says the query checks were not built: a query reads its dates in lpl::history's calendar.
+ */
+void testQuery()
+{
+    std::printf("── query: not built without the LplPlugin foundation, whose calendar it reads dates in\n");
+}
+
+#endif // LPL_HAS_FOUNDATION
 
 /**
  * @brief Exercises the baked text window.

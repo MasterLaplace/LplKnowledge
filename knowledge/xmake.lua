@@ -17,5 +17,12 @@ target("lpl-knowledge")
     -- LplKernel/docs/ARCHITECTURE_cible.md and is not settled here.
     add_includedirs("include", { public = true })
     add_files("src/**.cpp")
+    -- The reader's queries and its provenance read dates in lpl::history's calendar, places through
+    -- lpl::history::Place and relief through lpl::math's projection. A standalone build has none of
+    -- the three, so it leaves them out rather than copy lpl::history: it keeps the image reader.
+    if not LPL_FOUNDATION_AVAILABLE then
+        remove_files("src/FactStore.cpp", "src/PlaceResolver.cpp", "src/Provenance.cpp",
+                     "src/Query.cpp", "src/ReliefSource.cpp")
+    end
     add_headerfiles("include/(lpl/knowledge/**.hpp)")
 target_end()

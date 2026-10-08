@@ -404,8 +404,6 @@ private:
     mutable std::string _firstCollision;
 };
 
-#    if defined(LPL_HAS_FOUNDATION)
-
 /**
  * @brief Bakes the canonical corpus of gate P13 into an image.
  *
@@ -422,8 +420,6 @@ private:
  * @return false when the bake was refused.
  */
 [[nodiscard]] bool bakeParityCorpus(std::vector<core::u8> &out, BakeReport &report);
-
-#    endif // LPL_HAS_FOUNDATION
 
 } // namespace lpl::harvest
 
