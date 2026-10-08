@@ -14,10 +14,8 @@
 
 #include <algorithm>
 
-#if defined(LPL_HAS_FOUNDATION)
-#    include <lpl/history/Parity.hpp>
-#    include <lpl/knowledge/History.hpp>
-#endif
+#include <lpl/history/Parity.hpp>
+#include <lpl/knowledge/History.hpp>
 
 namespace lpl::harvest {
 
@@ -447,8 +445,6 @@ bool Baker::build(std::vector<core::u8> &out, BakeReport &report) const
     return true;
 }
 
-#if defined(LPL_HAS_FOUNDATION)
-
 bool bakeParityCorpus(std::vector<core::u8> &out, BakeReport &report)
 {
     history::Corpus corpus;
@@ -531,7 +527,5 @@ bool bakeParityCorpus(std::vector<core::u8> &out, BakeReport &report)
 
     return baker.build(out, report);
 }
-
-#endif // LPL_HAS_FOUNDATION
 
 } // namespace lpl::harvest

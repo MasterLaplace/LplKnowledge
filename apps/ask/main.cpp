@@ -39,10 +39,8 @@
 #include <lpl/knowledge/Provenance.hpp>
 #include <lpl/knowledge/Query.hpp>
 
-#if defined(LPL_HAS_FOUNDATION)
-#    include <lpl/history/PossibleWorld.hpp>
-#    include <lpl/knowledge/History.hpp>
-#endif
+#include <lpl/history/PossibleWorld.hpp>
+#include <lpl/knowledge/History.hpp>
 
 #include <cstdio>
 #include <cstdlib>
@@ -547,7 +545,6 @@ int main(int argc, char **argv)
     std::printf("\n%u matched, %u shown%s\n", page.matched, page.count,
                 page.truncated != 0u ? " — capped; narrow the query rather than raising the cap" : "");
 
-#if defined(LPL_HAS_FOUNDATION)
     // The consensus, from the module that owns the arithmetic. An all-listening WorldView is
     // what "the consensus world" means: same corpus, same function, no source excluded.
     lpl::history::Corpus corpus;
@@ -573,10 +570,6 @@ int main(int argc, char **argv)
         std::printf("consensus: unavailable — %u records this build cannot read\n",
                     report.badKind + report.badWindow + report.badConfidence);
     }
-#else
-    std::printf("consensus: unavailable in a standalone build — the arithmetic of doubt is\n"
-                "           lpl::history, and Fixed32 is not emulated here\n");
-#endif
 
     return 0;
 }
