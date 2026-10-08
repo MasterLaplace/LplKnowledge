@@ -81,20 +81,21 @@ void usage()
 /**
  * @brief What an identifier reads as, or its number when the image does not name it.
  *
+ * A name is returned where the image holds it, never copied, so no name is ever cut. The number is
+ * written into an array whose size the compiler knows, so one too small for the largest `u32` fails the build.
+ *
+ * @tparam Capacity Room in @p out, NUL included.
  * @param pack The image.
  * @param id   The identifier.
- * @param out  Receives a display string.
- * @param cap  Room in @p out.
- * @return @p out.
+ * @param out  Receives `#<id>` when the image does not name @p id.
+ * @return The image's own NUL-terminated name, or @p out.
  */
-const char *display(const lpl::knowledge::KnowledgePack &pack, lpl::core::u32 id, char *out, std::size_t cap)
+template <std::size_t Capacity>
+const char *display(const lpl::knowledge::KnowledgePack &pack, lpl::core::u32 id, char (&out)[Capacity])
 {
     if (const char *text = pack.textFor(id); text != nullptr)
-    {
-        std::snprintf(out, cap, "%s", text);
-        return out;
-    }
-    std::snprintf(out, cap, "#%u", id);
+        return text;
+    std::snprintf(out, Capacity, "#%u", id);
     return out;
 }
 
@@ -525,15 +526,13 @@ int main(int argc, char **argv)
                            texts.line(row.object, line, lineBytes);
 
         if (words)
-            std::printf("  %s %s  [%d..%d]  sigma_raw=%u\n    \"%.*s\"\n",
-                        display(pack, row.subject, subject, sizeof(subject)),
-                        display(pack, row.predicate, predicate, sizeof(predicate)), row.fromDay, row.toDay,
-                        row.confidenceRaw, static_cast<int>(lineBytes), line);
+            std::printf("  %s %s  [%d..%d]  sigma_raw=%u\n    \"%.*s\"\n", display(pack, row.subject, subject),
+                        display(pack, row.predicate, predicate), row.fromDay, row.toDay, row.confidenceRaw,
+                        static_cast<int>(lineBytes), line);
         else
-            std::printf("  %s %s %s  [%d..%d]  sigma_raw=%u\n", display(pack, row.subject, subject, sizeof(subject)),
-                        display(pack, row.predicate, predicate, sizeof(predicate)),
-                        display(pack, row.object, object, sizeof(object)), row.fromDay, row.toDay,
-                        row.confidenceRaw);
+            std::printf("  %s %s %s  [%d..%d]  sigma_raw=%u\n", display(pack, row.subject, subject),
+                        display(pack, row.predicate, predicate), display(pack, row.object, object), row.fromDay,
+                        row.toDay, row.confidenceRaw);
 
         lpl::knowledge::Citation citation{};
         if (lpl::knowledge::cite(pack, row, citation))
