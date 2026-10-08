@@ -29,7 +29,7 @@ xmake --root
 xmake run test-corpus-identity       # identity, addressing, the reader's refusals
 ```
 
-With LplPlugin next to it, `xmake run test-knowledge-parity` also runs gate P18 (below).
+With LplPlugin next to it, `xmake run test-knowledge` also runs gate P18 (below).
 
 Then bake a real corpus and ask it something. The LplKernel book carries 95 footnotes, each scoped
 by its chapter:
@@ -98,7 +98,8 @@ death of a king.
 ```sh
 xmake run test-corpus-identity     # identity, addressing, the reader's refusals (no foundation needed)
 xmake run test-harvest-ingest      # reading a corpus (no foundation needed)
-xmake run test-knowledge-parity    # gate P18: the round trip loses nothing
+xmake run test-knowledge           # gate P18: the round trip loses nothing, as in ring 0
+xmake run test-parity-bake         # and the image the kernel embeds is the one the writer bakes
 ```
 
 ## What it refuses to do

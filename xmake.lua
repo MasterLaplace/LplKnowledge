@@ -151,6 +151,8 @@ if LPL_FOUNDATION_AVAILABLE then
     -- the identity. The dependency is one-way by design: LplKnowledge knows about
     -- LplPlugin, never the reverse, exactly as LplAssistant does.
     add_includedirs(path.join(kFoundationRoot, "history/include"))
+    -- testing/, for gate P18's test: lpl::testing declares it, and runs it on the host and in ring 0.
+    add_includedirs(path.join(kFoundationRoot, "testing/include"))
     add_defines("LPL_HAS_FOUNDATION")
 else
     print("[%s] standalone build: LplPlugin foundation absent, host only", "LplKnowledge")
@@ -190,6 +192,14 @@ if LPL_FOUNDATION_AVAILABLE then
         add_files(path.join(kFoundationRoot, "history/src/Parity.cpp"))
         add_files(path.join(kFoundationRoot, "history/src/PossibleWorld.cpp"))
         add_files(path.join(kFoundationRoot, "history/src/Timeline.cpp"))
+    target_end()
+
+    -- The runner of lpl::testing and its host entry point, for test-knowledge.
+    target("lpl-testing")
+        set_kind("static")
+        set_group("modules")
+        add_files(path.join(kFoundationRoot, "testing/src/Runner.cpp"))
+        add_files(path.join(kFoundationRoot, "testing/host/main.cpp"))
     target_end()
 end
 

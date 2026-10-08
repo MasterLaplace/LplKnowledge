@@ -133,12 +133,23 @@ target_end()
 -- gate that passes without having checked anything is worse than no gate.
 if LPL_FOUNDATION_AVAILABLE then
 
-target("test-knowledge-parity")
+-- Every LPL_TEST of tests/<module>/, in KTAP. A debug LplKernel runs the same sources in ring 0,
+-- and its records must equal these. `xmake run test-knowledge 'corpus.*'` runs one suite.
+target("test-knowledge")
+    set_kind("binary")
+    set_group("tests")
+    set_default(false)
+    add_deps("lpl-testing", "lpl-knowledge", "lpl-corpus", "lpl-foundation")
+    add_files("*/*.cpp")
+target_end()
+
+-- The writer's half of the gate: the canonical bake, and the image the kernel embeds is that bake.
+target("test-parity-bake")
     set_kind("binary")
     set_group("tests")
     set_default(false)
     add_deps("lpl-knowledge", "lpl-corpus", "lpl-harvest", "lpl-foundation")
-    add_files("test_knowledge_parity.cpp")
+    add_files("test_parity_bake.cpp")
 target_end()
 
 end -- if LPL_FOUNDATION_AVAILABLE
