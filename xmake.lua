@@ -155,7 +155,8 @@ if LPL_FOUNDATION_AVAILABLE then
     add_includedirs(path.join(kFoundationRoot, "testing/include"))
     add_defines("LPL_HAS_FOUNDATION")
 else
-    print("[%s] standalone build: LplPlugin foundation absent, host only", "LplKnowledge")
+    print("[%s] standalone build: LplPlugin foundation absent, host only; harvest/, its tools and tests, "
+          .. "and the reader's queries are left out", "LplKnowledge")
 end
 
 -- ─────────────────────────────────────────────────────────────────────────────

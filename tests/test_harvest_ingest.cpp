@@ -7,8 +7,9 @@
  * to the line number. A checked-in fixture would drift the moment somebody reformatted it,
  * and the failure would look like a scanner bug.
  *
- * Needs no foundation: reading text into a baker is string handling, and the arithmetic of
- * doubt lives elsewhere.
+ * Nothing checked here needs Fixed32: reading text into a baker is string handling, and the
+ * arithmetic of doubt lives elsewhere. It is built with the foundation only because harvest/ is:
+ * the markdown reader dates its headings in lpl::history's calendar.
  *
  * @author MasterLaplace
  * @copyright MIT License
