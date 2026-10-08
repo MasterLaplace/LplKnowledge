@@ -16,9 +16,10 @@
 #include <lpl/corpus/Locus.hpp>
 #include <lpl/corpus/TextView.hpp>
 #include <lpl/corpus/Urn.hpp>
-#include <lpl/harvest/Baker.hpp>
-#include <lpl/harvest/Predicates.hpp>
 #include <lpl/harvest/AuthorDates.hpp>
+#include <lpl/harvest/Baker.hpp>
+#include <lpl/harvest/Mentions.hpp>
+#include <lpl/harvest/Predicates.hpp>
 #include <lpl/harvest/Tei.hpp>
 #include <lpl/harvest/Xml.hpp>
 #include <lpl/history/Calendar.hpp>
@@ -119,6 +120,40 @@ const char *const kWork =
     "</body>\n"
     "</text>\n"
     "</TEI>\n";
+
+/**
+ * Two TGN-shaped authority keys that differ and land on one identifier.
+ *
+ * @warning Found by a search over TGN-shaped keys, not taken from TGN: `nameIdentifier` is a 32-bit
+ * FNV-1a, so pairs like it are expected at corpus scale. The check that opens their section proves
+ * they collide, so a change of hash turns the fixture red instead of letting the refusal pass for
+ * having nothing to refuse.
+ */
+const char *const kCollidingPlaceKeys[2] = {"tgn,7132789", "tgn,7729192"};
+
+/**
+ * @brief A work of one passage that names two places, each under its authority key.
+ *
+ * @param firstKey  The `key` of the first `<placeName>`.
+ * @param secondKey The `key` of the second.
+ * @return The document.
+ */
+std::string workNamingTwoPlaces(const std::string &firstKey, const std::string &secondKey)
+{
+    return "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
+           "<TEI xmlns=\"http://www.tei-c.org/ns/1.0\">\n"
+           "<teiHeader><fileDesc><titleStmt><title>Two places</title></titleStmt></fileDesc></teiHeader>\n"
+           "<text><body>\n"
+           "<div type=\"edition\" n=\"urn:cts:latinLit:phi9999.phi001.fixture-lat1\">\n"
+           "<div type=\"textpart\" subtype=\"section\" n=\"1\">\n"
+           "<p><placeName key=\"" +
+           firstKey + "\">Roma</placeName> et <placeName key=\"" + secondKey +
+           "\">Athenae</placeName></p>\n"
+           "</div>\n"
+           "</div>\n"
+           "</body></text>\n"
+           "</TEI>\n";
+}
 
 } // namespace
 
@@ -438,6 +473,44 @@ int main()
           lpl::harvest::objectIsTextLine(lpl::harvest::kPredicatePassageText));
     check("and an identifier-valued one is not",
           !lpl::harvest::objectIsTextLine(lpl::harvest::kPredicateAttributedTo));
+
+    std::printf("── two mentions on one identifier\n");
+    {
+        const std::string first = kCollidingPlaceKeys[0];
+        const std::string second = kCollidingPlaceKeys[1];
+        check("the two authority keys land on one identifier",
+              first != second && lpl::harvest::authorityIdentifier(lpl::harvest::splitAuthorityKey(first)) ==
+                                     lpl::harvest::authorityIdentifier(lpl::harvest::splitAuthorityKey(second)));
+
+        lpl::harvest::TeiOptions mentions;
+        mentions.carryMentions = true;
+
+        writeDocument(root / "one-place-twice.xml", workNamingTwoPlaces(first, first));
+        std::vector<lpl::harvest::TeiSource> samePlace{
+            {(root / "one-place-twice.xml").string(), "fixture/one-place-twice.xml"}
+        };
+        lpl::harvest::Baker sameBaker;
+        lpl::harvest::TeiIngestReport sameReport{};
+        check("one place named twice is read",
+              lpl::harvest::ingestTei(samePlace, mentions, sameBaker, sameReport) && sameReport.placeMentions == 2u);
+        check("and is no collision", sameReport.firstCollision.empty());
+
+        writeDocument(root / "two-places-one-identifier.xml", workNamingTwoPlaces(first, second));
+        std::vector<lpl::harvest::TeiSource> twoPlaces{
+            {(root / "two-places-one-identifier.xml").string(), "fixture/two-places-one-identifier.xml"}
+        };
+        lpl::harvest::Baker collidingBaker;
+        lpl::harvest::TeiIngestReport collidingReport{};
+        check("two places on one identifier are refused",
+              !lpl::harvest::ingestTei(twoPlaces, mentions, collidingBaker, collidingReport));
+        check("the refusal names both keys", collidingReport.firstCollision == first + " / " + second);
+        check("the reading stops at the collision", collidingReport.placeMentions == 1u);
+
+        std::vector<lpl::core::u8> refusedImage;
+        lpl::harvest::BakeReport refusedBake{};
+        check("and the bake refuses it, with the collision counted",
+              !collidingBaker.build(refusedImage, refusedBake) && refusedBake.collisions == 1u);
+    }
 
     std::printf("-- the soft join: a value may be filled, an identity may not\n");
     {
