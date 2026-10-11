@@ -37,8 +37,8 @@
  *
  * Integer arithmetic throughout, in raw Q16.16 words. Not for the kernel's sake — this
  * module is host-only — but because `include/lpl/Foundation.hpp` refuses to emulate Fixed32
- * in a standalone build, and a similarity that existed only when a sibling checkout did
- * would make half this repository's tests conditional on it.
+ * in a standalone build, so a similarity in Fixed32 could never be computed without a sibling
+ * checkout.
  *
  * @author MasterLaplace
  * @version 0.1.0

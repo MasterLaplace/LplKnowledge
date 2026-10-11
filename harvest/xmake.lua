@@ -9,6 +9,12 @@
 -- implementations being slow is precisely the gap worth closing.
 -- /////////////////////////////////////////////////////////////////////////////
 
+-- Declared only with the foundation: Baker, which every reader writes through, lays relief out in
+-- lpl::math's projection, and the markdown, mention, research and catalogue readers date what they
+-- read in lpl::history's calendar. A standalone build has neither, and a harvest without ground or
+-- dates would be a stub of this one.
+if LPL_FOUNDATION_AVAILABLE then
+
 -- ⚠ libcurl rather than the `curl` binary. Both were tried, in that order, and the library wins
 -- on three counts that are not style: no process per request (a harvest is thousands of them),
 -- a REUSED connection to one repository instead of a fresh TLS handshake each page, and headers
@@ -26,3 +32,5 @@ target("lpl-harvest")
     add_packages("libcurl", { public = true })
     add_headerfiles("include/(lpl/harvest/**.hpp)")
 target_end()
+
+end -- if LPL_FOUNDATION_AVAILABLE

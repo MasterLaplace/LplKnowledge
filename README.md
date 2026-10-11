@@ -29,7 +29,8 @@ xmake --root
 xmake run test-corpus-identity       # identity, addressing, the reader's refusals
 ```
 
-With LplPlugin next to it, `xmake run test-knowledge` also runs gate P18 (below).
+With LplPlugin next to it, the build also holds `harvest/` and the tools that bake and query an
+image, and `xmake run test-knowledge` runs gate P18 (below).
 
 Then bake a real corpus and ask it something. The LplKernel book carries 95 footnotes, each scoped
 by its chapter:
@@ -78,8 +79,8 @@ foundation. `include/lpl/Foundation.hpp` is the one place that knows the differe
 
 | Mode | What is available |
 |---|---|
-| foundation present (`LPL_HAS_FOUNDATION`) | the determinism contract, and a `-ffreestanding` build |
-| standalone | host only; Fixed32 is not emulated |
+| foundation present (`LPL_HAS_FOUNDATION`) | everything: the determinism contract, `harvest/` and its tools, and a `-ffreestanding` build |
+| standalone | host only: `corpus/`, the image reader without its queries or provenance, and the `mirror/` and `media/` scaffolding. `harvest/` and its three tools are left out, since they need `lpl::history`'s calendar and `lpl::math`'s projection. Fixed32 is not emulated. |
 
 **What `lpl-ingest` reads.** Every document where it lives. It skips build output, generated views
 and cloned third-party repositories: without those exclusions it once read 711 documents for the same
@@ -97,7 +98,7 @@ death of a king.
 
 ```sh
 xmake run test-corpus-identity     # identity, addressing, the reader's refusals (no foundation needed)
-xmake run test-harvest-ingest      # reading a corpus (no foundation needed)
+xmake run test-harvest-ingest      # reading a corpus (needs LplPlugin, as harvest/ does)
 xmake run test-knowledge           # gate P18: the round trip loses nothing, as in ring 0
 xmake run test-parity-bake         # and the image the kernel embeds is the one the writer bakes
 ```

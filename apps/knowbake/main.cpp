@@ -179,7 +179,6 @@ void usage()
  */
 [[nodiscard]] bool bakeCanonical(std::vector<lpl::core::u8> &out)
 {
-#if defined(LPL_HAS_FOUNDATION)
     lpl::harvest::BakeReport report{};
     if (!lpl::harvest::bakeParityCorpus(out, report))
     {
@@ -204,12 +203,6 @@ void usage()
     std::printf("baked %u bytes: %u facts, %u sources, %u documents, %u loci, %u names, %u sections\n", report.bytes,
                 report.facts, report.sources, report.documents, report.loci, report.vocabulary, report.sections);
     return true;
-#else
-    (void) out;
-    std::fprintf(stderr, "lpl-knowbake: --parity needs the LplPlugin foundation (the corpus lives in\n"
-                         "              history::parityCorpus, and is deliberately not restated here)\n");
-    return false;
-#endif
 }
 
 } // namespace

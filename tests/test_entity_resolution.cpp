@@ -8,8 +8,9 @@
  * corroborate does; a corpus built NOT to corroborate has to fail to, or the measurement is
  * satisfied by a function that says yes to everything.
  *
- * No foundation needed: every number here is an integer in raw Q16.16, which is what lets
- * this run in a standalone checkout where Fixed32 does not exist.
+ * Every number here is an integer in raw Q16.16, so nothing checked needs Fixed32. It is built
+ * with the foundation only because harvest/ is: Baker.hpp lays relief out in lpl::math's
+ * projection.
  *
  * @author MasterLaplace
  * @copyright MIT License
