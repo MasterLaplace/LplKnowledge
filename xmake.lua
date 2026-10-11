@@ -17,6 +17,12 @@
 add_rules("mode.debug", "mode.release")
 set_languages("c++23", "c17")
 set_warnings("allextra")
+-- snprintf truncates in silence: a 512-byte buffer once cut a generated header in the middle of an
+-- identifier. At level 2 GCC sizes each call for the largest number each argument can hold, and as an
+-- error a buffer too small for it stops the build. A string of unknown length counts as one byte, so a
+-- `%s` still checks what snprintf returns. One flag on purpose: `-Wformat-truncation=2
+-- -Werror=format-truncation` resets the level to 1. Clang has no levels, hence GCC alone.
+add_cxflags("-Werror=format-truncation=2", {tools = {"gcc", "gxx"}})
 
 -- ─────────────────────────────────────────────────────────────────────────────
 -- Le socle LplPlugin (Fixed32, CORDIC, les ombrelles lpl::pmr) est une AMÉLIORATION
