@@ -1,10 +1,14 @@
 #include <lpl/history/Parity.hpp>
 #include <lpl/knowledge/FactStore.hpp>
 #include <lpl/knowledge/History.hpp>
+#include <lpl/knowledge/KnowledgePack.hpp>
 #include <lpl/knowledge/Parity.hpp>
 #include <lpl/knowledge/ParityKnowBlob.hpp>
 #include <lpl/knowledge/Provenance.hpp>
+#include <lpl/knowledge/Types.hpp>
 #include <lpl/testing/Test.hpp>
+
+#include <cstddef>
 
 LPL_TEST_SUITE(corpus);
 
@@ -75,6 +79,43 @@ LPL_TEST(one_flipped_byte_is_refused)
         test.check(broken.open(damaged, lpl::knowledge::kParityKnowledgeImageSize) != lpl::knowledge::OpenStatus::Ok,
                    "one flipped byte is refused");
     }
+}
+
+/**
+ * @brief A vocabulary whose text does not end in a NUL is refused for that, not for its hash:
+ *        textFor returns a pointer into that block as a C string, so an unterminated block makes
+ *        a lookup read past the section. The embedded image, whose text does terminate, opens.
+ */
+LPL_TEST(unterminated_vocabulary_text_is_refused)
+{
+    alignas(16) lpl::core::u8 image[lpl::knowledge::kParityKnowledgeImageSize];
+    for (lpl::core::u32 index = 0u; index < lpl::knowledge::kParityKnowledgeImageSize; ++index)
+        image[index] = lpl::knowledge::kParityKnowledgeImage[index];
+
+    lpl::knowledge::KnowledgePack located;
+    const lpl::core::u8 *section = nullptr;
+    lpl::core::u32 sectionSize = 0u;
+    if (!test.check(located.open(image, lpl::knowledge::kParityKnowledgeImageSize) == lpl::knowledge::OpenStatus::Ok &&
+                        located.section(lpl::knowledge::SectionType::Vocabulary, section, sectionSize),
+                    "the embedded image carries a vocabulary section"))
+        return;
+
+    const lpl::core::u32 lastByte = static_cast<lpl::core::u32>(section - image) + sectionSize - 1u;
+    test.check(image[lastByte] == 0u, "its text ends in a NUL, as the format requires");
+    image[lastByte] = static_cast<lpl::core::u8>('x');
+
+    lpl::core::u32 hash = lpl::knowledge::kFnv1aOffsetBasis;
+    lpl::knowledge::foldBytes(hash, image + sizeof(lpl::knowledge::Header),
+                              lpl::knowledge::kParityKnowledgeImageSize -
+                                  static_cast<lpl::core::u32>(sizeof(lpl::knowledge::Header)));
+    for (lpl::core::u32 byte = 0u; byte < 4u; ++byte)
+        image[offsetof(lpl::knowledge::Header, contentHash) + byte] =
+            static_cast<lpl::core::u8>((hash >> (byte * 8u)) & 0xFFu);
+
+    lpl::knowledge::KnowledgePack broken;
+    test.check(broken.open(image, lpl::knowledge::kParityKnowledgeImageSize) ==
+                   lpl::knowledge::OpenStatus::UnterminatedText,
+               "the unterminated vocabulary text is refused, and not the hash");
 }
 
 /**
