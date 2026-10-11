@@ -580,7 +580,7 @@ int main(int argc, char **argv)
         if (!lpl::harvest::ingestTei(tei, options, baker, teiReport))
         {
             if (!teiReport.firstCollision.empty())
-                std::fprintf(stderr, "lpl-ingest: two works claim one identity - %s\n",
+                std::fprintf(stderr, "lpl-ingest: one identifier is claimed twice - %s\n",
                              teiReport.firstCollision.c_str());
             else
                 std::fprintf(stderr, "lpl-ingest: a TEI document could not be read\n");

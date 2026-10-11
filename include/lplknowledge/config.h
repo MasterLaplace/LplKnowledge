@@ -26,7 +26,7 @@
 #define LPLKNOWLEDGE_NAME "LplKnowledge"
 #define LPLKNOWLEDGE_VERSION_MAJOR 0
 #define LPLKNOWLEDGE_VERSION_MINOR 2
-#define LPLKNOWLEDGE_VERSION_PATCH 0
+#define LPLKNOWLEDGE_VERSION_PATCH 1
 /** @} */
 
 /** The shared part, down to the Requirements group: laplace-config v1, from MasterLaplace/.github templates/config.h. */

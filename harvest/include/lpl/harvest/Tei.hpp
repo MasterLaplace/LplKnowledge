@@ -214,7 +214,8 @@ struct TeiIngestReport {
     core::u32 authors{0u};    ///< Distinct authors named.
     std::string firstUnaddressable; ///< The first citation that could not be expressed.
     /**
-     * The identity two works collided on, and the file that lost.
+     * What stopped the reading on one identifier: the URN two works share and the file that lost,
+     * or the two names Baker refused to fuse (`a / b`), the authority key of a mention included.
      *
      * @warning A refusal that does not name what it refused sends the reader to guess, and guessing
      * is what this repository keeps paying for. Measured: the first run over the whole Perseus
@@ -248,8 +249,9 @@ struct TeiIngestReport {
  * @param options What the run is for.
  * @param baker   Where to put it.
  * @param outReport Receives the tally.
- * @return false when a document could not be opened, or when two works collide on one
- *         identifier — a corpus that silently merges two works is worse than one that refuses.
+ * @return false when a document could not be opened, or when two works, or two names, collide on
+ *         one identifier (@ref TeiIngestReport::firstCollision says which) — a corpus that silently
+ *         merges two works or two places is worse than one that refuses.
  */
 [[nodiscard]] bool ingestTei(const std::vector<TeiSource> &sources, const TeiOptions &options, Baker &baker,
                              TeiIngestReport &outReport);

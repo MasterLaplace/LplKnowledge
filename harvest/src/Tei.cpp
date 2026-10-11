@@ -69,10 +69,12 @@ constexpr const char *kFallbackPrefix = "urn:cts:lplTei:";
  * @param work      The work, which is the subject: a mention is a fact about the TEXT.
  * @param where     The passage's locus.
  * @param baker     Where to put it.
- * @param outReport Receives the tally.
+ * @param outReport Receives the tally, and the two keys when a collision stops the scan.
+ * @return false when an authority key lands on an identifier already named otherwise: two entities
+ *         would fuse into one, a collision Baker calls fatal, so nothing more is read.
  */
-void scanMentions(std::string_view view, std::size_t begin, std::size_t end, core::u32 work, core::u32 where,
-                  Baker &baker, TeiIngestReport &outReport)
+[[nodiscard]] bool scanMentions(std::string_view view, std::size_t begin, std::size_t end, core::u32 work,
+                                core::u32 where, Baker &baker, TeiIngestReport &outReport)
 {
     XmlElement element;
     std::size_t cursor = begin;
@@ -102,7 +104,11 @@ void scanMentions(std::string_view view, std::size_t begin, std::size_t end, cor
                 // An editor's authority key: a HARD key, which may fuse. The identifier is built
                 // from the whole key because two authorities number independently.
                 fact.object = authorityIdentifier(split);
-                baker.name(fact.object, key);
+                if (!baker.name(fact.object, key))
+                {
+                    outReport.firstCollision = baker.firstCollision();
+                    return false;
+                }
             }
             else
             {
@@ -148,6 +154,7 @@ void scanMentions(std::string_view view, std::size_t begin, std::size_t end, cor
             ++outReport.datedPassages;
         }
     }
+    return true;
 }
 
 } // namespace
@@ -566,8 +573,9 @@ bool ingestTei(const std::vector<TeiSource> &sources, const TeiOptions &options,
 
                     // Every textpart is CITABLE — a reader asking for book 1 chapter 2 must
                     // find it — but only a leaf carries words, for the reason on Open::hasChild.
-                    if (options.carryMentions && !closed.hasChild)
-                        scanMentions(view, closed.contentBegin, element.begin, work, where, baker, outReport);
+                    if (options.carryMentions && !closed.hasChild &&
+                        !scanMentions(view, closed.contentBegin, element.begin, work, where, baker, outReport))
+                        return false;
 
                     if (options.carryText && !closed.hasChild)
                     {
