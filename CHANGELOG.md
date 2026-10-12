@@ -5,7 +5,15 @@ What changed in each release, generated from the commit titles on `main`. Regene
 an edit by hand is lost at the next release, whose check refuses a file that differs from
 what the history gives.
 
-## [0.2.1] - 2026-10-08
+## [0.2.2] - 2026-10-11
+
+### Fixed
+
+- **knowledge**: Refuse a vocabulary whose text does not end in a NUL (#111)
+- **apps,build**: Stop snprintf from truncating in silence (#110)
+- **build**: Build without the foundation again, leaving out what needs it (#107)
+
+## [0.2.1] - 2026-10-11
 
 ### Fixed
 
